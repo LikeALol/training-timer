@@ -7,6 +7,25 @@ type Listener = () => void;
 
 const PRESETS_KEY = "presets.v2";
 
+const PRESETS_BACKUP_KEY = "presets.backup.v2";
+
+function backupWrite(presets: Preset[]) {
+    try {
+        localStorage.setItem(PRESETS_BACKUP_KEY, JSON.stringify(presets));
+    } catch {}
+}
+
+function backupRead(): Preset[] | null {
+    try {
+        const raw = localStorage.getItem(PRESETS_BACKUP_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map(normalizePreset) : null;
+    } catch {
+        return null;
+    }
+}
+
 export class PresetStore {
     private presets: Preset[] = [];
     private loaded = false;
@@ -24,21 +43,40 @@ export class PresetStore {
     async ensureLoaded(): Promise<void> {
         if (this.loaded) return;
 
-        const data = await idbGet<any>(PRESETS_KEY);
+        let data: any = undefined;
+        try {
+            data = await idbGet<any>(PRESETS_KEY);
+        } catch {
+            data = undefined;
+        }
 
         if (Array.isArray(data)) {
             this.presets = data.map(normalizePreset);
         } else {
-            // attempt migration from v1 if present
-            const v1 = await idbGet<any>("presets.v1");
-            if (Array.isArray(v1)) {
-                this.presets = v1.map((p: any) =>
-                    normalizePreset({ ...p, exercises: [] })
-                );
-                await idbSet(PRESETS_KEY, this.presets);
+            const backup = backupRead();
+            if (backup) {
+                this.presets = backup;
             } else {
-                this.presets = [];
+                // attempt migration from v1 if present
+                let v1: any = undefined;
+                try {
+                    v1 = await idbGet<any>("presets.v1");
+                } catch {
+                    v1 = undefined;
+                }
+
+                if (Array.isArray(v1)) {
+                    this.presets = v1.map((p: any) => normalizePreset({ ...p, exercises: [] }));
+                } else {
+                    this.presets = [];
+                }
             }
+
+            // persist into v2 store when we had to fall back
+            try {
+                await idbSet(PRESETS_KEY, this.presets);
+            } catch {}
+            backupWrite(this.presets);
         }
 
         this.loaded = true;
@@ -164,9 +202,15 @@ export class PresetStore {
     }
 
     private async save(): Promise<void> {
-        await idbSet(PRESETS_KEY, this.presets);
+        try {
+            await idbSet(PRESETS_KEY, this.presets);
+        } catch {
+            // IndexedDB may be blocked; still keep localStorage backup
+        }
+        backupWrite(this.presets);
         this.emit();
     }
+
 }
 
 function normalizePreset(p: any): Preset {

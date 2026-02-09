@@ -23,6 +23,10 @@ export function PresetList(props: { tab: TabType; store: PresetStore }) {
         };
     }, [store]);
 
+    useEffect(() => {
+        setEditingPresetId(null);
+    }, [tab]);
+
     if (loading) return <div>Loading…</div>;
 
     if (editingPresetId) {
@@ -40,8 +44,6 @@ export function PresetList(props: { tab: TabType; store: PresetStore }) {
 
     return (
         <div>
-            <h2>Presets</h2>
-
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <input
                     value={newName}

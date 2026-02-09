@@ -104,7 +104,7 @@ export function ExerciseEditor(props: {
                 </label>
 
                 <label>
-                    Rest between sets (s){" "}
+                    {isWorkout ? "Warm-up rest (s)" : "Rest between sets (s)"}{" "}
                     <input
                         inputMode="numeric"
                         value={String(draft.restSecondsBetweenSets)}
@@ -113,13 +113,14 @@ export function ExerciseEditor(props: {
                 </label>
 
                 <label>
-                    Rest between sides (s){" "}
+                    {isWorkout ? "Working rest (s)" : "Rest between sides (s)"}{" "}
                     <input
                         inputMode="numeric"
                         value={String(draft.restSecondsBetweenSides)}
                         onChange={(e) => setDraft({ ...draft, restSecondsBetweenSides: toInt(e.target.value, 0) })}
                     />
                 </label>
+
 
                 {isWorkout && (
                     <>
@@ -140,12 +141,6 @@ export function ExerciseEditor(props: {
                                 onChange={(e) => setDraft({ ...draft, workingSets: toInt(e.target.value, 0) })}
                             />
                         </label>
-
-                        <div style={{ fontSize: 12 }}>
-                            Note: workout rest times are still stored in the same fields for now:
-                            <div>- Warm-up rest: Rest between sets</div>
-                            <div>- Working rest: Rest between sides</div>
-                        </div>
                     </>
                 )}
 

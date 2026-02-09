@@ -4,21 +4,78 @@ import { ExecutionScreen } from "./components/ExecutionScreen";
 import { PresetList } from "./components/PresetList";
 import { TabType } from "./models";
 import { PresetStore } from "./viewmodels/presetStore";
+import { SessionEngine } from "./engine/sessionEngine";
+import { GlobalTimer } from "./engine/globalTimer";
+import { useGlobalTimer } from "./engine/useGlobalTimer";
 
 export default function App() {
     const store = useMemo(() => new PresetStore(), []);
+
+    const preEngine = useMemo(() => new SessionEngine(TabType.PreMobility), []);
+    const workoutEngine = useMemo(() => new SessionEngine(TabType.Workout), []);
+    const postEngine = useMemo(() => new SessionEngine(TabType.PostMobility), []);
+
+    const globalTimer = useMemo(() => new GlobalTimer("globalTimer.v1"), []);
+    const globalSnap = useGlobalTimer(globalTimer);
+
     const [tab, setTab] = useState<TabType>(TabType.PreMobility);
+
+    const engine =
+        tab === TabType.PreMobility ? preEngine : tab === TabType.Workout ? workoutEngine : postEngine;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
-            <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
-                <h1 style={{ marginTop: 0 }}>{tabTitle(tab)}</h1>
+            <div style={{ flex: 1, overflow: "auto" }}>
+                <div style={{ padding: 12, maxWidth: 520, margin: "0 auto" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                        <h1 style={{ marginTop: 0, marginBottom: 6, fontSize: 20 }}>
+                            {tabTitle(tab)}:{" "}
+                            <span
+                                style={{
+                                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                                    fontSize: "0.75em",
+                                    fontWeight: 600,
+                                    whiteSpace: "nowrap",
+                                }}
+                            >
+                {formatHms(globalSnap.elapsedSeconds)}
+              </span>
+                        </h1>
+                    </div>
 
-                <PresetList tab={tab} store={store} />
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <button
+                            style={{ flex: 1 }}
+                            type="button"
+                            onClick={() => globalTimer.start()}
+                            disabled={globalSnap.isRunning}
+                        >
+                            Start
+                        </button>
+                        <button
+                            style={{ flex: 1 }}
+                            type="button"
+                            onClick={() => globalTimer.pause()}
+                            disabled={!globalSnap.isRunning}
+                        >
+                            Pause
+                        </button>
+                        <button style={{ flex: 1 }} type="button" onClick={() => globalTimer.reset()}>
+                            Reset
+                        </button>
+                    </div>
 
-                <hr />
+                    <details style={{ marginBottom: 12 }}>
+                        <summary style={{ cursor: "pointer" }}>Presets</summary>
+                        <div style={{ marginTop: 10 }}>
+                            <PresetList tab={tab} store={store} />
+                        </div>
+                    </details>
 
-                <ExecutionScreen tab={tab} store={store} />
+                    <hr />
+
+                    <ExecutionScreen tab={tab} store={store} engine={engine} />
+                </div>
             </div>
 
             <TabBar tab={tab} onChange={setTab} />
@@ -35,4 +92,11 @@ function tabTitle(tab: TabType): string {
         case TabType.PostMobility:
             return "Post-Mobility";
     }
+}
+
+function formatHms(totalSeconds: number): string {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
