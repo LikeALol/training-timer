@@ -94,6 +94,85 @@ export class PresetStore {
         return this.presets.find((p) => p.id === id);
     }
 
+    exportAllByTab(): Record<string, Preset[]> {
+        return {
+            [TabType.PreMobility]: this.presets.filter((p) => p.tabType === TabType.PreMobility).map(normalizePreset),
+            [TabType.Workout]: this.presets.filter((p) => p.tabType === TabType.Workout).map(normalizePreset),
+            [TabType.PostMobility]: this.presets.filter((p) => p.tabType === TabType.PostMobility).map(normalizePreset),
+        };
+    }
+
+    async importAllByTab(byTab: Record<string, Preset[]>): Promise<void> {
+        const next: Preset[] = [];
+
+        for (const tab of [TabType.PreMobility, TabType.Workout, TabType.PostMobility] as const) {
+            const arr = byTab[tab];
+            if (!Array.isArray(arr)) continue;
+
+            for (const raw of arr) {
+                next.push(normalizePreset({ ...raw, tabType: tab }));
+            }
+        }
+
+        this.presets = next;
+        this.loaded = true;
+        await this.save();
+    }
+
+    async duplicatePreset(presetId: string): Promise<string | null> {
+        const src = this.getById(presetId);
+        if (!src) return null;
+
+        const copyId = crypto.randomUUID();
+
+        const copy: Preset = normalizePreset({
+            ...src,
+            id: copyId,
+            name: `${src.name} (copy)`,
+            exercises: src.exercises.map((ex) => ({
+                ...ex,
+                id: crypto.randomUUID(),
+                name: ex.name,
+            })),
+        });
+
+        const idx = this.presets.findIndex((p) => p.id === presetId);
+        if (idx >= 0) {
+            const next = this.presets.slice();
+            next.splice(idx + 1, 0, copy);
+            this.presets = next;
+        } else {
+            this.presets = [...this.presets, copy];
+        }
+
+        await this.save();
+        return copyId;
+    }
+
+    async duplicateExercise(presetId: string, exerciseId: string): Promise<string | null> {
+        const preset = this.getById(presetId);
+        if (!preset) return null;
+
+        const idx = preset.exercises.findIndex((e) => e.id === exerciseId);
+        if (idx < 0) return null;
+
+        const src = preset.exercises[idx];
+        const copyId = crypto.randomUUID();
+
+        const copy: Exercise = normalizeExercise({
+            ...src,
+            id: copyId,
+            name: `${src.name} (copy)`,
+        });
+
+        const nextExercises = preset.exercises.slice();
+        nextExercises.splice(idx + 1, 0, copy);
+
+        await this.updatePreset(presetId, { exercises: nextExercises });
+        return copyId;
+    }
+
+
     async create(tab: TabType, name: string): Promise<void> {
         const trimmed = name.trim();
         if (!trimmed) return;
@@ -143,7 +222,7 @@ export class PresetStore {
         const ex: Exercise = {
             id: crypto.randomUUID(),
             name: trimmed,
-            mode: ExerciseModeValue.Time,
+            mode: ExerciseModeValue.Reps,
             durationSeconds: 30,
             reps: 10,
             sets: 1,
@@ -247,3 +326,4 @@ function clampInt(v: any, min: number, max: number): number {
     if (!Number.isFinite(n)) return min;
     return Math.max(min, Math.min(max, n));
 }
+

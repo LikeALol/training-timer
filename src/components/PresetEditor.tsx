@@ -124,6 +124,7 @@ export function PresetEditor(props: {
                             count={preset.exercises.length}
                             onEdit={() => setEditingExerciseId(ex.id)}
                             onDelete={() => store.removeExercise(preset.id, ex.id)}
+                            onDuplicate={() => store.duplicateExercise(preset.id, ex.id)}
                             onMoveUp={() => store.moveExercise(preset.id, ex.id, -1)}
                             onMoveDown={() => store.moveExercise(preset.id, ex.id, 1)}
                         />
@@ -140,15 +141,18 @@ function ExerciseRow(props: {
     count: number;
     onEdit: () => void;
     onDelete: () => void;
+    onDuplicate: () => void;
     onMoveUp: () => void;
     onMoveDown: () => void;
 }) {
-    const { ex, idx, count, onEdit, onDelete, onMoveUp, onMoveDown } = props;
+    const { ex, idx, count, onEdit, onDelete, onDuplicate, onMoveUp, onMoveDown } = props;
+
     return (
         <div style={{ border: "1px solid currentColor", padding: 12 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <strong>{idx + 1}. {ex.name}</strong>
                 <button type="button" onClick={onEdit}>Edit</button>
+                <button type="button" onClick={onDuplicate}>Duplicate</button>
                 <button type="button" onClick={onDelete}>Delete</button>
             </div>
 

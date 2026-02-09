@@ -10,10 +10,12 @@ export function ExerciseEditor(props: {
 }) {
     const { tab, exercise, onBack, onSave } = props;
 
-    const [draft, setDraft] = useState<Exercise | null>(exercise);
+    const [draft, setDraft] = useState<Exercise | null>(() =>
+        exercise ? { ...exercise, mode: exercise.mode ?? ExerciseMode.Reps } : null
+    );
 
     useEffect(() => {
-        setDraft(exercise);
+        setDraft(exercise ? { ...exercise, mode: exercise.mode ?? ExerciseMode.Reps } : null);
     }, [exercise?.id]);
 
     if (!draft) {
@@ -26,6 +28,7 @@ export function ExerciseEditor(props: {
     }
 
     const isWorkout = tab === TabType.Workout;
+    const derivedSets = isWorkout ? draft.warmupSets + draft.workingSets : draft.sets;
 
     return (
         <div>
@@ -52,35 +55,37 @@ export function ExerciseEditor(props: {
                     </select>
                 </label>
 
-                {draft.mode === ExerciseMode.Time ? (
-                    <label>
-                        Duration (s){" "}
-                        <input
-                            inputMode="numeric"
-                            value={String(draft.durationSeconds)}
-                            onChange={(e) => setDraft({ ...draft, durationSeconds: toInt(e.target.value, 1) })}
-                        />
-                    </label>
-                ) : (
+                {draft.mode === ExerciseMode.Reps ? (
                     <label>
                         Reps{" "}
                         <input
                             inputMode="numeric"
-                            value={String(draft.reps)}
-                            onChange={(e) => setDraft({ ...draft, reps: toInt(e.target.value, 1) })}
+                            value={showEmptyIfZero(draft.reps)}
+                            onChange={(e) => setDraft({ ...draft, reps: toIntAllowEmpty(e.target.value, 1) })}
+                        />
+                    </label>
+                ) : (
+                    <label>
+                        Duration (s){" "}
+                        <input
+                            inputMode="numeric"
+                            value={showEmptyIfZero(draft.durationSeconds)}
+                            onChange={(e) => setDraft({ ...draft, durationSeconds: toIntAllowEmpty(e.target.value, 1) })}
+
                         />
                     </label>
                 )}
-
                 <label>
                     Sets{" "}
                     <input
                         inputMode="numeric"
-                        value={String(draft.sets)}
-                        onChange={(e) => setDraft({ ...draft, sets: toInt(e.target.value, 1) })}
+                        value={isWorkout ? String(derivedSets) : showEmptyIfZero(draft.sets)}
+                        readOnly={isWorkout}
+                        onChange={
+                            isWorkout ? undefined : (e) => setDraft({ ...draft, sets: toIntAllowEmpty(e.target.value, 1) })
+                        }
                     />
                 </label>
-
                 <label>
                     <input
                         type="checkbox"
@@ -107,8 +112,8 @@ export function ExerciseEditor(props: {
                     {isWorkout ? "Warm-up rest (s)" : "Rest between sets (s)"}{" "}
                     <input
                         inputMode="numeric"
-                        value={String(draft.restSecondsBetweenSets)}
-                        onChange={(e) => setDraft({ ...draft, restSecondsBetweenSets: toInt(e.target.value, 0) })}
+                        value={showEmptyIfZero(draft.restSecondsBetweenSets)}
+                        onChange={(e) => setDraft({ ...draft, restSecondsBetweenSets: toIntAllowEmpty(e.target.value, 0) })}
                     />
                 </label>
 
@@ -117,8 +122,8 @@ export function ExerciseEditor(props: {
                         {isWorkout ? "Working rest (s)" : "Rest between sides (s)"}{" "}
                         <input
                             inputMode="numeric"
-                            value={String(draft.restSecondsBetweenSides)}
-                            onChange={(e) => setDraft({ ...draft, restSecondsBetweenSides: toInt(e.target.value, 0) })}
+                            value={showEmptyIfZero(draft.restSecondsBetweenSides)}
+                            onChange={(e) => setDraft({ ...draft, restSecondsBetweenSides: toIntAllowEmpty(e.target.value, 0) })}
                         />
                     </label>
                 )}
@@ -129,8 +134,9 @@ export function ExerciseEditor(props: {
                             Warm-up sets{" "}
                             <input
                                 inputMode="numeric"
-                                value={String(draft.warmupSets)}
-                                onChange={(e) => setDraft({ ...draft, warmupSets: toInt(e.target.value, 0) })}
+                                value={showEmptyIfZero(draft.warmupSets)}
+                                onChange={(e) => setDraft({ ...draft, warmupSets: toIntAllowEmpty(e.target.value, 0) })}
+
                             />
                         </label>
 
@@ -138,8 +144,9 @@ export function ExerciseEditor(props: {
                             Working sets{" "}
                             <input
                                 inputMode="numeric"
-                                value={String(draft.workingSets)}
-                                onChange={(e) => setDraft({ ...draft, workingSets: toInt(e.target.value, 0) })}
+                                value={showEmptyIfZero(draft.workingSets)}
+                                onChange={(e) => setDraft({ ...draft, workingSets: toIntAllowEmpty(e.target.value, 0) })}
+
                             />
                         </label>
                     </>
@@ -153,6 +160,15 @@ export function ExerciseEditor(props: {
     );
 }
 
+function toIntAllowEmpty(v: string, minWhenNotEmpty: number): number {
+    if (v.trim() === "") return 0;
+    return toInt(v, minWhenNotEmpty);
+}
+
+function showEmptyIfZero(n: number): string {
+    return n === 0 ? "" : String(n);
+}
+
 function toInt(v: string, min: number): number {
     const n = Math.floor(Number(v));
     if (!Number.isFinite(n)) return min;
@@ -160,16 +176,19 @@ function toInt(v: string, min: number): number {
 }
 
 function sanitize(e: Exercise, isWorkout: boolean): Exercise {
+    const warmupSets = isWorkout ? Math.max(0, Math.floor(e.warmupSets)) : 0;
+    const workingSets = isWorkout ? Math.max(0, Math.floor(e.workingSets)) : 0;
+
     return {
         ...e,
         name: e.name.trim() || "Exercise",
         durationSeconds: Math.max(1, Math.floor(e.durationSeconds)),
         reps: Math.max(1, Math.floor(e.reps)),
-        sets: Math.max(1, Math.floor(e.sets)),
+        sets: isWorkout ? Math.max(1, warmupSets + workingSets) : Math.max(1, Math.floor(e.sets)),
         restSecondsBetweenSets: Math.max(0, Math.floor(e.restSecondsBetweenSets)),
         restSecondsBetweenSides: Math.max(0, Math.floor(e.restSecondsBetweenSides)),
-        warmupSets: isWorkout ? Math.max(0, Math.floor(e.warmupSets)) : 0,
-        workingSets: isWorkout ? Math.max(0, Math.floor(e.workingSets)) : 0,
-        setupSeconds: e.setupSeconds == null ? undefined : Math.max(1, Math.floor(e.setupSeconds)),
+        warmupSets,
+        workingSets,
+        setupSeconds: (e.setupSeconds == null || e.setupSeconds === 0) ? undefined : Math.max(1, Math.floor(e.setupSeconds)),
     };
 }
