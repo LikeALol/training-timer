@@ -56,6 +56,9 @@ type EngineSnapshot = {
     stepStartedAtMs?: number;
     stepElapsedBeforePauseMs: number;
 
+    // Per-exercise elapsed time (resets when starting a new exercise)
+    exerciseStartedAtMs?: number;
+    exerciseElapsedBeforePauseMs: number;
 };
 
 type Listener = () => void;
@@ -78,7 +81,11 @@ export class SessionEngine {
     private tickHandle: number | null = null;
     private stepStartedAtMs?: number;
     private stepElapsedBeforePauseMs = 0;
+
     private readonly storageKey: string;
+
+    private exerciseStartedAtMs?: number;
+    private exerciseElapsedBeforePauseMs = 0;
 
     constructor(tab: TabType) {
         this.storageKey = `engine.snapshot.${tab}.v1`;
@@ -109,6 +116,9 @@ export class SessionEngine {
             this.stepElapsedBeforePauseMs +
             (this.stepStartedAtMs && !this.isPaused ? now - this.stepStartedAtMs : 0);
 
+        const exerciseElapsedMs =
+            this.exerciseElapsedBeforePauseMs +
+            (this.exerciseStartedAtMs && !this.isPaused ? now - this.exerciseStartedAtMs : 0);
 
         let timeRemainingSeconds: number | null = null;
         if (this.isPaused && this.remainingSecondsWhenPaused != null) {
@@ -125,12 +135,13 @@ export class SessionEngine {
             stepCount: this.steps.length,
             timeRemainingSeconds,
             totalElapsedSeconds: Math.floor(elapsedMs / 1000),
-            stepElapsedSeconds: Math.floor(stepElapsedMs / 1000)
+            stepElapsedSeconds: Math.floor(stepElapsedMs / 1000),
+            exerciseElapsedSeconds: Math.floor(exerciseElapsedMs / 1000),
         };
     }
 
-    // ---- mobility: start a session with prebuilt steps ----
-    startSession(steps: SessionStep[]) {
+    // ---- mobility/workout: start a session with prebuilt steps ----
+    startSession(steps: SessionStep[], opts?: { preserveTotalElapsed?: boolean }) {
         this.steps = steps;
         this.index = 0;
 
@@ -140,8 +151,20 @@ export class SessionEngine {
         this.targetTimeMs = undefined;
         this.remainingSecondsWhenPaused = undefined;
 
-        this.elapsedBeforePauseMs = 0;
-        this.startedAtMs = Date.now();
+        const preserveTotal = opts?.preserveTotalElapsed === true;
+
+        // Exercise timer always resets on new exercise.
+        this.exerciseElapsedBeforePauseMs = 0;
+        this.exerciseStartedAtMs = Date.now();
+
+        // Total timer resets only if we are not preserving it.
+        if (!preserveTotal) {
+            this.elapsedBeforePauseMs = 0;
+            this.startedAtMs = Date.now();
+        } else {
+            // Preserve elapsedBeforePauseMs; ensure we start accumulating again if needed.
+            if (!this.startedAtMs) this.startedAtMs = Date.now();
+        }
 
         this.enterCurrentStep();
         this.persist();
@@ -190,6 +213,11 @@ export class SessionEngine {
             this.stepStartedAtMs = undefined;
         }
 
+        if (this.exerciseStartedAtMs != null) {
+            this.exerciseElapsedBeforePauseMs += Date.now() - this.exerciseStartedAtMs;
+            this.exerciseStartedAtMs = undefined;
+        }
+
         this.persist();
         this.emit();
     }
@@ -203,6 +231,7 @@ export class SessionEngine {
         // Resume elapsed
         this.startedAtMs = Date.now();
         this.stepStartedAtMs = Date.now();
+        this.exerciseStartedAtMs = Date.now();
 
         // Resume timer
         if (this.remainingSecondsWhenPaused != null) {
@@ -251,14 +280,15 @@ export class SessionEngine {
         this.stepStartedAtMs = undefined;
         this.stepElapsedBeforePauseMs = 0;
 
+        this.exerciseStartedAtMs = undefined;
+        this.exerciseElapsedBeforePauseMs = 0;
+
         try {
             localStorage.removeItem(this.storageKey);
         } catch {}
 
         this.emit();
     }
-
-
 
     // Called by UI on page background/foreground events
     appBecameActive() {
@@ -352,6 +382,11 @@ export class SessionEngine {
             this.startedAtMs = undefined;
         }
 
+        if (this.exerciseStartedAtMs != null) {
+            this.exerciseElapsedBeforePauseMs += Date.now() - this.exerciseStartedAtMs;
+            this.exerciseStartedAtMs = undefined;
+        }
+
         this.persist();
         this.emit();
     }
@@ -414,8 +449,6 @@ export class SessionEngine {
 
             return;
         }
-
-
     }
 
     // For reps-based mobility: user indicates they finished current step.
@@ -434,7 +467,6 @@ export class SessionEngine {
         this.advance();
     }
 
-
     // ---- persistence ----
     private persist() {
         const snap: EngineSnapshot = {
@@ -448,6 +480,8 @@ export class SessionEngine {
             elapsedBeforePauseMs: this.elapsedBeforePauseMs,
             stepStartedAtMs: this.stepStartedAtMs,
             stepElapsedBeforePauseMs: this.stepElapsedBeforePauseMs,
+            exerciseStartedAtMs: this.exerciseStartedAtMs,
+            exerciseElapsedBeforePauseMs: this.exerciseElapsedBeforePauseMs,
         };
 
         try {
@@ -477,10 +511,14 @@ export class SessionEngine {
             this.stepElapsedBeforePauseMs =
                 typeof snap.stepElapsedBeforePauseMs === "number" ? snap.stepElapsedBeforePauseMs : 0;
 
+            this.exerciseElapsedBeforePauseMs =
+                typeof snap.exerciseElapsedBeforePauseMs === "number" ? snap.exerciseElapsedBeforePauseMs : 0;
+
             const midSession = this.state !== SessionState.Idle && this.state !== SessionState.Completed;
 
             this.startedAtMs = (!this.isPaused && midSession) ? Date.now() : undefined;
             this.stepStartedAtMs = (!this.isPaused && midSession) ? Date.now() : undefined;
+            this.exerciseStartedAtMs = (!this.isPaused && midSession) ? Date.now() : undefined;
 
             if (midSession) {
                 this.reconcileAfterBackground();
@@ -489,5 +527,4 @@ export class SessionEngine {
             // ignore
         }
     }
-
 }

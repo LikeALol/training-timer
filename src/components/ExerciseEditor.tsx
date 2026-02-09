@@ -112,15 +112,16 @@ export function ExerciseEditor(props: {
                     />
                 </label>
 
-                <label>
-                    {isWorkout ? "Working rest (s)" : "Rest between sides (s)"}{" "}
-                    <input
-                        inputMode="numeric"
-                        value={String(draft.restSecondsBetweenSides)}
-                        onChange={(e) => setDraft({ ...draft, restSecondsBetweenSides: toInt(e.target.value, 0) })}
-                    />
-                </label>
-
+                {(isWorkout || draft.perSide) && (
+                    <label>
+                        {isWorkout ? "Working rest (s)" : "Rest between sides (s)"}{" "}
+                        <input
+                            inputMode="numeric"
+                            value={String(draft.restSecondsBetweenSides)}
+                            onChange={(e) => setDraft({ ...draft, restSecondsBetweenSides: toInt(e.target.value, 0) })}
+                        />
+                    </label>
+                )}
 
                 {isWorkout && (
                     <>
