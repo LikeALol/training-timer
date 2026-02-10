@@ -71,20 +71,21 @@ export function WorkoutEditor(props: {
                     </button>
                 </div>
 
-                {tab !== TabType.Workout && (
-                    <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        <label>
-                            Rest between exercises (s){" "}
-                            <input value={restBetween} inputMode="numeric" onChange={(e) => setRestBetween(e.target.value)} />
-                        </label>
-                        <button
-                            type="button"
-                            onClick={() => store.setMobilityRestBetweenExercises(workout.id, Number(restBetween))}
-                        >
-                            Save
-                        </button>
+                <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <label>
+                        Rest between exercises (s){" "}
+                        <input value={restBetween} inputMode="numeric" onChange={(e) => setRestBetween(e.target.value)} />
+                    </label>
+                    <button
+                        type="button"
+                        onClick={() => store.setRestBetweenExercises(workout.id, Number(restBetween))}
+                    >
+                        Save
+                    </button>
+                    <div style={{ fontSize: 12 }}>
+                        Hint: set to 0 to disable auto-next exercise.
                     </div>
-                )}
+                </div>
 
                 {tab !== TabType.Workout && !mobilityCountOk && (
                     <div style={{ marginTop: 8 }}>

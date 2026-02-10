@@ -204,12 +204,17 @@ export class WorkoutStore {
         await this.save();
     }
 
-    async setMobilityRestBetweenExercises(id: string, seconds: number): Promise<void> {
+    async setRestBetweenExercises(id: string, seconds: number): Promise<void> {
         const v = clampInt(seconds, 0, 120);
         this.workouts = this.workouts.map((p) =>
             p.id === id ? { ...p, restBetweenExercisesSeconds: v } : p
         );
         await this.save();
+    }
+
+    // Backward-compatible alias.
+    async setMobilityRestBetweenExercises(id: string, seconds: number): Promise<void> {
+        await this.setRestBetweenExercises(id, seconds);
     }
 
     // -------- Exercises (ordered) --------
@@ -328,4 +333,3 @@ function clampInt(v: any, min: number, max: number): number {
     if (!Number.isFinite(n)) return min;
     return Math.max(min, Math.min(max, n));
 }
-
