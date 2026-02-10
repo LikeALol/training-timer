@@ -1,12 +1,18 @@
+import { ExerciseMode } from "../models";
 import type { Exercise } from "../models";
 import { StepKind } from "./sessionEngine";
 import type { SessionStep } from "./sessionEngine";
 
 export function validateWorkoutExercise(ex: Exercise): string | null {
     const reps = clampInt(ex.reps, 0, 500);
+    const durationSeconds = clampInt(ex.durationSeconds, 0, 3600);
     const { warmups, working } = resolveWorkoutSetCounts(ex);
 
-    if (reps < 1) return "Reps must be at least 1.";
+    if (ex.mode === ExerciseMode.Time) {
+        if (durationSeconds < 1) return "Duration must be at least 1 second.";
+    } else if (reps < 1) {
+        return "Reps must be at least 1.";
+    }
     if (warmups + working < 1) return "Warm-up sets + working sets must be at least 1.";
 
     return null;
@@ -41,6 +47,8 @@ export function buildWorkoutStepsForExercise(ex: Exercise): SessionStep[] {
 
     const { warmups, working, usesLegacySets } = resolveWorkoutSetCounts(ex);
     const reps = clampInt(ex.reps, 1, 500);
+    const durationSeconds = clampInt(ex.durationSeconds, 1, 3600);
+    const isTimeMode = ex.mode === ExerciseMode.Time;
 
     const total = warmups + working;
 
@@ -53,10 +61,13 @@ export function buildWorkoutStepsForExercise(ex: Exercise): SessionStep[] {
 
         out.push({
             id: crypto.randomUUID(),
-            kind: StepKind.AwaitUserDone,
+            kind: isTimeMode ? StepKind.TimedActive : StepKind.AwaitUserDone,
             exerciseId: ex.id,
             exerciseName: ex.name,
-            label: `${phase} • Set ${phaseIndex}/${phaseCount} • ${reps} reps`,
+            label: isTimeMode
+                ? `${phase} • Set ${phaseIndex}/${phaseCount} • ${durationSeconds}s`
+                : `${phase} • Set ${phaseIndex}/${phaseCount} • ${reps} reps`,
+            durationSeconds: isTimeMode ? durationSeconds : undefined,
         });
 
         // No rest after last set
@@ -65,7 +76,7 @@ export function buildWorkoutStepsForExercise(ex: Exercise): SessionStep[] {
         // Convention:
         // warm-up rest = restSecondsBetweenSets
         // working rest = restSecondsBetweenSides
-        const restSeconds = usesLegacySets
+        const restSeconds = usesLegacySets || isTimeMode
             ? clampInt(ex.restSecondsBetweenSets, 0, 3600)
             : isWarmup
               ? clampInt(ex.restSecondsBetweenSets, 0, 3600)

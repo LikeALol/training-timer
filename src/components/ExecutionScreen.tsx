@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TabType } from "../models";
 import { WorkoutStore } from "../viewmodels/workoutStore";
 import { useStoreSubscription } from "../viewmodels/useStore";
@@ -86,6 +86,9 @@ function ExerciseExecution(props: {
         if (idx <= 0) return undefined;
         return exercises[idx - 1];
     })();
+    const restBetweenExercisesSeconds = Math.max(0, Math.floor(workout?.restBetweenExercisesSeconds ?? 0));
+    const [nextExerciseCountdown, setNextExerciseCountdown] = useState<number | null>(null);
+    const [betweenExercisesStartedAtMs, setBetweenExercisesStartedAtMs] = useState<number | null>(null);
 
     const upNextExerciseName = (() => {
         if (!isRestStep) return undefined;
@@ -126,6 +129,57 @@ function ExerciseExecution(props: {
         localStorage.setItem(exerciseKey, previousExercise.id);
         engine.startSession(prevSteps, { preserveTotalElapsed: true, startIndex: targetIndex });
     };
+
+    const startNextExercise = useCallback(() => {
+        if (!nextExercise) return;
+        setNextExerciseCountdown(null);
+        setBetweenExercisesStartedAtMs(null);
+        setExerciseId(nextExercise.id);
+        localStorage.setItem(exerciseKey, nextExercise.id);
+        engine.startSession(buildWorkoutStepsForExercise(nextExercise), {
+            preserveTotalElapsed: true,
+        });
+    }, [engine, exerciseKey, nextExercise]);
+
+    useEffect(() => {
+        if (!isCompleted || !nextExercise || restBetweenExercisesSeconds <= 0) {
+            setNextExerciseCountdown(null);
+            setBetweenExercisesStartedAtMs(null);
+            return;
+        }
+        setNextExerciseCountdown(restBetweenExercisesSeconds);
+        setBetweenExercisesStartedAtMs(Date.now());
+    }, [isCompleted, nextExercise?.id, restBetweenExercisesSeconds]);
+
+    useEffect(() => {
+        if (!isCompleted || !nextExercise || nextExerciseCountdown == null) return;
+        if (nextExerciseCountdown <= 0) {
+            startNextExercise();
+            return;
+        }
+        const t = window.setTimeout(() => {
+            setNextExerciseCountdown((n) => (n == null ? n : n - 1));
+        }, 1000);
+        return () => window.clearTimeout(t);
+    }, [isCompleted, nextExercise?.id, nextExerciseCountdown, startNextExercise]);
+
+    const inBetweenExercisesRest =
+        isCompleted &&
+        !!nextExercise &&
+        nextExerciseCountdown != null &&
+        restBetweenExercisesSeconds > 0;
+    const betweenElapsedSeconds =
+        inBetweenExercisesRest && betweenExercisesStartedAtMs != null
+            ? Math.max(0, Math.floor((Date.now() - betweenExercisesStartedAtMs) / 1000))
+            : 0;
+    const displayState = inBetweenExercisesRest
+        ? "Completed • Inter-exercise rest"
+        : snap.state;
+    const displayTotalElapsedSeconds = (snap.totalElapsedSeconds ?? 0) + betweenElapsedSeconds;
+    const displayExerciseElapsedSeconds = (snap.exerciseElapsedSeconds ?? 0) + betweenElapsedSeconds;
+    const displayTimeRemainingSeconds = inBetweenExercisesRest
+        ? Math.max(0, nextExerciseCountdown ?? 0)
+        : snap.timeRemainingSeconds;
 
     return (
         <div>
@@ -190,6 +244,10 @@ function ExerciseExecution(props: {
                 title={snap.currentStep?.exerciseName || exercise?.name}
                 label={snap.currentStep?.label}
                 upNextExerciseName={upNextExerciseName}
+                stateLabel={displayState}
+                totalElapsedSeconds={displayTotalElapsedSeconds}
+                exerciseElapsedSeconds={displayExerciseElapsedSeconds}
+                timeRemainingSeconds={displayTimeRemainingSeconds}
             >
                 {isIdle && (
                     <button
@@ -294,15 +352,7 @@ function ExerciseExecution(props: {
                                 <button
                                     type="button"
                                     style={{ flex: 1 }}
-                                    onClick={() => {
-                                        setExerciseId(nextExercise.id);
-                                        localStorage.setItem(exerciseKey, nextExercise.id);
-
-                                        // Preserve total elapsed across exercises.
-                                        engine.startSession(buildWorkoutStepsForExercise(nextExercise), {
-                                            preserveTotalElapsed: true,
-                                        });
-                                    }}
+                                    onClick={startNextExercise}
                                 >
                                     Next Exercise
                                 </button>
@@ -346,25 +396,41 @@ function ExecutionBox(props: {
     title?: string;
     label?: string;
     upNextExerciseName?: string;
+    stateLabel?: string;
+    totalElapsedSeconds?: number;
+    exerciseElapsedSeconds?: number;
+    timeRemainingSeconds?: number | null;
     children: React.ReactNode;
 }) {
-    const { snap, title, label, upNextExerciseName, children } = props;
+    const {
+        snap,
+        title,
+        label,
+        upNextExerciseName,
+        stateLabel,
+        totalElapsedSeconds,
+        exerciseElapsedSeconds,
+        timeRemainingSeconds,
+        children,
+    } = props;
 
     return (
         <div style={{ marginTop: 12, border: "1px solid currentColor", padding: 12 }}>
-            <div>State: {snap.state}</div>
+            <div>State: {stateLabel ?? snap.state}</div>
             {snap.state === "completed" && (
                 <div style={{ textAlign: "center", fontWeight: 700, marginTop: 8 }}>
                     Session complete
                 </div>
             )}
 
-            {timeRow("Total elapsed", formatHms(snap.totalElapsedSeconds))}
-            {timeRow("Exercise elapsed", formatHms(snap.exerciseElapsedSeconds ?? 0))}
+            {timeRow("Total elapsed", formatHms(totalElapsedSeconds ?? snap.totalElapsedSeconds))}
+            {timeRow("Exercise elapsed", formatHms(exerciseElapsedSeconds ?? snap.exerciseElapsedSeconds ?? 0))}
             {timeRow("Step elapsed", formatHms(snap.stepElapsedSeconds ?? 0))}
             {timeRow(
                 "Time remaining",
-                snap.timeRemainingSeconds == null ? "-" : formatHms(snap.timeRemainingSeconds)
+                (timeRemainingSeconds ?? snap.timeRemainingSeconds) == null
+                    ? "-"
+                    : formatHms((timeRemainingSeconds ?? snap.timeRemainingSeconds) as number)
             )}
 
             <hr />
