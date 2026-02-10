@@ -175,20 +175,6 @@ export class SessionEngine {
     // - if idle: no-op (caller should create session first)
     // - if paused: resume
     // - otherwise: if current step is timed, (re)start it
-    startOrResume() {
-        if (this.state === SessionState.Completed || this.state === SessionState.Idle) return;
-
-        if (this.isPaused) {
-            this.resume();
-            return;
-        }
-
-        // For mobility: steps always auto-run; Start just ensures timer is running
-        this.beginTimerForCurrentStepIfNeeded();
-        this.persist();
-        this.emit();
-    }
-
     pause() {
         if (this.isPaused) return;
         if (this.state === SessionState.Idle || this.state === SessionState.Completed) return;
