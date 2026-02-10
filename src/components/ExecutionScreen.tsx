@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { TabType } from "../models";
-import { PresetStore } from "../viewmodels/presetStore";
+import { WorkoutStore } from "../viewmodels/workoutStore";
 import { useStoreSubscription } from "../viewmodels/useStore";
 import type { SessionEngine } from "../engine/sessionEngine";
 import { SessionState } from "../engine/sessionEngine";
@@ -14,7 +14,7 @@ import {
 
 export function ExecutionScreen(props: {
     tab: TabType;
-    store: PresetStore;
+    store: WorkoutStore;
     engine: SessionEngine;
 }) {
     return <ExerciseExecution {...props} />;
@@ -24,7 +24,7 @@ export function ExecutionScreen(props: {
 
 function ExerciseExecution(props: {
     tab: TabType;
-    store: PresetStore;
+    store: WorkoutStore;
     engine: SessionEngine;
 }) {
     const { tab, store, engine } = props;
@@ -32,20 +32,21 @@ function ExerciseExecution(props: {
     useStoreSubscription(store.subscribe.bind(store));
     const snap = useEngine(engine);
 
-    const presetKey = `selectedPresetId.${tab}`;
+    const workoutKey = `selectedWorkoutId.${tab}`;
+    const legacyWorkoutKey = `selectedPresetId.${tab}`;
     const exerciseKey = `selectedExerciseId.${tab}`;
 
-    const [presetId, setPresetId] = useState(
-        () => localStorage.getItem(presetKey) ?? ""
+    const [workoutId, setWorkoutId] = useState(
+        () => localStorage.getItem(workoutKey) ?? localStorage.getItem(legacyWorkoutKey) ?? ""
     );
     const [exerciseId, setExerciseId] = useState(
         () => localStorage.getItem(exerciseKey) ?? ""
     );
 
     useEffect(() => {
-        setPresetId(localStorage.getItem(presetKey) ?? "");
+        setWorkoutId(localStorage.getItem(workoutKey) ?? localStorage.getItem(legacyWorkoutKey) ?? "");
         setExerciseId(localStorage.getItem(exerciseKey) ?? "");
-    }, [tab, presetKey, exerciseKey]);
+    }, [tab, workoutKey, legacyWorkoutKey, exerciseKey]);
 
     useEffect(() => {
         const onVis = () =>
@@ -56,9 +57,9 @@ function ExerciseExecution(props: {
         return () => document.removeEventListener("visibilitychange", onVis);
     }, [engine]);
 
-    const presets = store.list(tab);
-    const preset = presetId ? store.getById(presetId) : undefined;
-    const exercises = preset?.exercises ?? [];
+    const workouts = store.list(tab);
+    const workout = workoutId ? store.getById(workoutId) : undefined;
+    const exercises = workout?.exercises ?? [];
     const exercise = exerciseId
         ? exercises.find((e) => e.id === exerciseId)
         : undefined;
@@ -131,17 +132,18 @@ function ExerciseExecution(props: {
             <h2>Execution</h2>
 
             <label>
-                Preset{" "}
+                Workout{" "}
                 <select
-                    value={presetId}
+                    value={workoutId}
                     onChange={(e) => {
                         const v = e.target.value;
-                        setPresetId(v);
+                        setWorkoutId(v);
                         v
-                            ? localStorage.setItem(presetKey, v)
-                            : localStorage.removeItem(presetKey);
-                        const nextPreset = v ? store.getById(v) : undefined;
-                        const firstExerciseId = nextPreset?.exercises[0]?.id ?? "";
+                            ? localStorage.setItem(workoutKey, v)
+                            : localStorage.removeItem(workoutKey);
+                        localStorage.removeItem(legacyWorkoutKey);
+                        const nextWorkout = v ? store.getById(v) : undefined;
+                        const firstExerciseId = nextWorkout?.exercises[0]?.id ?? "";
                         setExerciseId(firstExerciseId);
                         firstExerciseId
                             ? localStorage.setItem(exerciseKey, firstExerciseId)
@@ -150,7 +152,7 @@ function ExerciseExecution(props: {
                     }}
                 >
                     <option value="">None</option>
-                    {presets.map((p) => (
+                    {workouts.map((p) => (
                         <option key={p.id} value={p.id}>
                             {p.name}
                         </option>
@@ -162,7 +164,7 @@ function ExerciseExecution(props: {
                 Exercise{" "}
                 <select
                     value={exerciseId}
-                    disabled={!preset}
+                    disabled={!workout}
                     onChange={(e) => {
                         const v = e.target.value;
                         setExerciseId(v);

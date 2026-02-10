@@ -1,50 +1,50 @@
 import { useEffect, useState } from "react";
 import { TabType } from "../models";
 import type { Exercise } from "../models";
-import { PresetStore } from "../viewmodels/presetStore";
+import { WorkoutStore } from "../viewmodels/workoutStore";
 import { useStoreSubscription } from "../viewmodels/useStore";
 import { ExerciseEditor } from "./ExerciseEditor";
 
-export function PresetEditor(props: {
-    presetId: string;
+export function WorkoutEditor(props: {
+    workoutId: string;
     tab: TabType;
-    store: PresetStore;
+    store: WorkoutStore;
     onBack: () => void;
 }) {
-    const { presetId, tab, store, onBack } = props;
+    const { workoutId, tab, store, onBack } = props;
 
     useStoreSubscription(store.subscribe.bind(store));
 
-    const preset = store.getById(presetId);
-    const [name, setName] = useState(preset?.name ?? "");
-    const [restBetween, setRestBetween] = useState(String(preset?.restBetweenExercisesSeconds ?? 25));
+    const workout = store.getById(workoutId);
+    const [name, setName] = useState(workout?.name ?? "");
+    const [restBetween, setRestBetween] = useState(String(workout?.restBetweenExercisesSeconds ?? 25));
     const [newExerciseName, setNewExerciseName] = useState("");
     const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!preset) return;
-        setName(preset.name);
-        setRestBetween(String(preset.restBetweenExercisesSeconds));
-    }, [preset?.name, preset?.restBetweenExercisesSeconds]);
+        if (!workout) return;
+        setName(workout.name);
+        setRestBetween(String(workout.restBetweenExercisesSeconds));
+    }, [workout?.name, workout?.restBetweenExercisesSeconds]);
 
-    if (!preset) {
+    if (!workout) {
         return (
             <div>
                 <button type="button" onClick={onBack}>Back</button>
-                <div style={{ marginTop: 12 }}>Preset not found.</div>
+                <div style={{ marginTop: 12 }}>Workout not found.</div>
             </div>
         );
     }
 
     if (editingExerciseId) {
-        const ex = preset.exercises.find((e) => e.id === editingExerciseId);
+        const ex = workout.exercises.find((e) => e.id === editingExerciseId);
         return (
             <ExerciseEditor
                 tab={tab}
                 exercise={ex ?? null}
                 onBack={() => setEditingExerciseId(null)}
                 onSave={async (updated) => {
-                    await store.updateExercise(preset.id, updated);
+                    await store.updateExercise(workout.id, updated);
                     setEditingExerciseId(null);
                 }}
             />
@@ -52,13 +52,13 @@ export function PresetEditor(props: {
     }
 
     const mobilityCountOk =
-        tab === TabType.Workout ? true : preset.exercises.length >= 3 && preset.exercises.length <= 10;
+        tab === TabType.Workout ? true : workout.exercises.length >= 3 && workout.exercises.length <= 10;
 
     return (
         <div>
             <button type="button" onClick={onBack}>Back</button>
 
-            <h2 style={{ marginTop: 12 }}>Edit Preset</h2>
+            <h2 style={{ marginTop: 12 }}>Edit Workout</h2>
 
             <div style={{ border: "1px solid currentColor", padding: 12 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -66,7 +66,7 @@ export function PresetEditor(props: {
                         Name{" "}
                         <input value={name} onChange={(e) => setName(e.target.value)} />
                     </label>
-                    <button type="button" onClick={() => store.rename(preset.id, name)}>
+                    <button type="button" onClick={() => store.rename(workout.id, name)}>
                         Save
                     </button>
                 </div>
@@ -79,7 +79,7 @@ export function PresetEditor(props: {
                         </label>
                         <button
                             type="button"
-                            onClick={() => store.setMobilityRestBetweenExercises(preset.id, Number(restBetween))}
+                            onClick={() => store.setMobilityRestBetweenExercises(workout.id, Number(restBetween))}
                         >
                             Save
                         </button>
@@ -88,7 +88,7 @@ export function PresetEditor(props: {
 
                 {tab !== TabType.Workout && !mobilityCountOk && (
                     <div style={{ marginTop: 8 }}>
-                        Mobility presets must have 3–10 exercises.
+                        Mobility workouts must have 3–10 exercises.
                     </div>
                 )}
             </div>
@@ -104,7 +104,7 @@ export function PresetEditor(props: {
                 <button
                     type="button"
                     onClick={async () => {
-                        await store.addExercise(preset.id, newExerciseName);
+                        await store.addExercise(workout.id, newExerciseName);
                         setNewExerciseName("");
                     }}
                 >
@@ -113,20 +113,20 @@ export function PresetEditor(props: {
             </div>
 
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                {preset.exercises.length === 0 ? (
+                {workout.exercises.length === 0 ? (
                     <div>No exercises yet.</div>
                 ) : (
-                    preset.exercises.map((ex, idx) => (
+                    workout.exercises.map((ex, idx) => (
                         <ExerciseRow
                             key={ex.id}
                             ex={ex}
                             idx={idx}
-                            count={preset.exercises.length}
+                            count={workout.exercises.length}
                             onEdit={() => setEditingExerciseId(ex.id)}
-                            onDelete={() => store.removeExercise(preset.id, ex.id)}
-                            onDuplicate={() => store.duplicateExercise(preset.id, ex.id)}
-                            onMoveUp={() => store.moveExercise(preset.id, ex.id, -1)}
-                            onMoveDown={() => store.moveExercise(preset.id, ex.id, 1)}
+                            onDelete={() => store.removeExercise(workout.id, ex.id)}
+                            onDuplicate={() => store.duplicateExercise(workout.id, ex.id)}
+                            onMoveUp={() => store.moveExercise(workout.id, ex.id, -1)}
+                            onMoveDown={() => store.moveExercise(workout.id, ex.id, 1)}
                         />
                     ))
                 )}

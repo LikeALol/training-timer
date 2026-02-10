@@ -1,33 +1,35 @@
 import { idbGet, idbSet } from "../persistence/idb";
 import { TabType } from "../models";
-import type { Preset, Exercise } from "../models";
+import type { Workout, Exercise } from "../models";
 import { ExerciseMode as ExerciseModeValue } from "../models";
 
 type Listener = () => void;
 
-const PRESETS_KEY = "presets.v2";
+const WORKOUTS_KEY = "presets.v2";
 
-const PRESETS_BACKUP_KEY = "presets.backup.v2";
+// Keep legacy key names for backward compatibility.
 
-function backupWrite(presets: Preset[]) {
+const WORKOUTS_BACKUP_KEY = "presets.backup.v2";
+
+function backupWrite(workouts: Workout[]) {
     try {
-        localStorage.setItem(PRESETS_BACKUP_KEY, JSON.stringify(presets));
+        localStorage.setItem(WORKOUTS_BACKUP_KEY, JSON.stringify(workouts));
     } catch {}
 }
 
-function backupRead(): Preset[] | null {
+function backupRead(): Workout[] | null {
     try {
-        const raw = localStorage.getItem(PRESETS_BACKUP_KEY);
+        const raw = localStorage.getItem(WORKOUTS_BACKUP_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed.map(normalizePreset) : null;
+        return Array.isArray(parsed) ? parsed.map(normalizeWorkout) : null;
     } catch {
         return null;
     }
 }
 
-export class PresetStore {
-    private presets: Preset[] = [];
+export class WorkoutStore {
+    private workouts: Workout[] = [];
     private loaded = false;
     private listeners = new Set<Listener>();
 
@@ -45,17 +47,17 @@ export class PresetStore {
 
         let data: any = undefined;
         try {
-            data = await idbGet<any>(PRESETS_KEY);
+            data = await idbGet<any>(WORKOUTS_KEY);
         } catch {
             data = undefined;
         }
 
         if (Array.isArray(data)) {
-            this.presets = data.map(normalizePreset);
+            this.workouts = data.map(normalizeWorkout);
         } else {
             const backup = backupRead();
             if (backup) {
-                this.presets = backup;
+                this.workouts = backup;
             } else {
                 // attempt migration from v1 if present
                 let v1: any = undefined;
@@ -66,66 +68,66 @@ export class PresetStore {
                 }
 
                 if (Array.isArray(v1)) {
-                    this.presets = v1.map((p: any) => normalizePreset({ ...p, exercises: [] }));
+                    this.workouts = v1.map((p: any) => normalizeWorkout({ ...p, exercises: [] }));
                 } else {
-                    this.presets = [];
+                    this.workouts = [];
                 }
             }
 
             // persist into v2 store when we had to fall back
             try {
-                await idbSet(PRESETS_KEY, this.presets);
+                await idbSet(WORKOUTS_KEY, this.workouts);
             } catch {}
-            backupWrite(this.presets);
+            backupWrite(this.workouts);
         }
 
         this.loaded = true;
         this.emit();
     }
 
-    list(tab: TabType): Preset[] {
-        return this.presets
+    list(tab: TabType): Workout[] {
+        return this.workouts
             .filter((p) => p.tabType === tab)
             .slice()
             .sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    getById(id: string): Preset | undefined {
-        return this.presets.find((p) => p.id === id);
+    getById(id: string): Workout | undefined {
+        return this.workouts.find((p) => p.id === id);
     }
 
-    exportAllByTab(): Record<string, Preset[]> {
+    exportAllByTab(): Record<string, Workout[]> {
         return {
-            [TabType.PreMobility]: this.presets.filter((p) => p.tabType === TabType.PreMobility).map(normalizePreset),
-            [TabType.Workout]: this.presets.filter((p) => p.tabType === TabType.Workout).map(normalizePreset),
-            [TabType.PostMobility]: this.presets.filter((p) => p.tabType === TabType.PostMobility).map(normalizePreset),
+            [TabType.PreMobility]: this.workouts.filter((p) => p.tabType === TabType.PreMobility).map(normalizeWorkout),
+            [TabType.Workout]: this.workouts.filter((p) => p.tabType === TabType.Workout).map(normalizeWorkout),
+            [TabType.PostMobility]: this.workouts.filter((p) => p.tabType === TabType.PostMobility).map(normalizeWorkout),
         };
     }
 
-    async importAllByTab(byTab: Record<string, Preset[]>): Promise<void> {
-        const next: Preset[] = [];
+    async importAllByTab(byTab: Record<string, Workout[]>): Promise<void> {
+        const next: Workout[] = [];
 
         for (const tab of [TabType.PreMobility, TabType.Workout, TabType.PostMobility] as const) {
             const arr = byTab[tab];
             if (!Array.isArray(arr)) continue;
 
             for (const raw of arr) {
-                next.push(normalizePreset({ ...raw, tabType: tab }));
+                next.push(normalizeWorkout({ ...raw, tabType: tab }));
             }
         }
 
-        this.presets = next;
+        this.workouts = next;
         this.loaded = true;
         await this.save();
     }
 
-    async duplicatePreset(presetId: string): Promise<string | null> {
-        const src = this.getById(presetId);
+    async duplicateWorkout(workoutId: string): Promise<string | null> {
+        const src = this.getById(workoutId);
         if (!src) return null;
 
         const copyId = crypto.randomUUID();
 
-        const copy: Preset = normalizePreset({
+        const copy: Workout = normalizeWorkout({
             ...src,
             id: copyId,
             name: `${src.name} (copy)`,
@@ -136,27 +138,27 @@ export class PresetStore {
             })),
         });
 
-        const idx = this.presets.findIndex((p) => p.id === presetId);
+        const idx = this.workouts.findIndex((p) => p.id === workoutId);
         if (idx >= 0) {
-            const next = this.presets.slice();
+            const next = this.workouts.slice();
             next.splice(idx + 1, 0, copy);
-            this.presets = next;
+            this.workouts = next;
         } else {
-            this.presets = [...this.presets, copy];
+            this.workouts = [...this.workouts, copy];
         }
 
         await this.save();
         return copyId;
     }
 
-    async duplicateExercise(presetId: string, exerciseId: string): Promise<string | null> {
-        const preset = this.getById(presetId);
-        if (!preset) return null;
+    async duplicateExercise(workoutId: string, exerciseId: string): Promise<string | null> {
+        const workout = this.getById(workoutId);
+        if (!workout) return null;
 
-        const idx = preset.exercises.findIndex((e) => e.id === exerciseId);
+        const idx = workout.exercises.findIndex((e) => e.id === exerciseId);
         if (idx < 0) return null;
 
-        const src = preset.exercises[idx];
+        const src = workout.exercises[idx];
         const copyId = crypto.randomUUID();
 
         const copy: Exercise = normalizeExercise({
@@ -165,10 +167,10 @@ export class PresetStore {
             name: `${src.name} (copy)`,
         });
 
-        const nextExercises = preset.exercises.slice();
+        const nextExercises = workout.exercises.slice();
         nextExercises.splice(idx + 1, 0, copy);
 
-        await this.updatePreset(presetId, { exercises: nextExercises });
+        await this.updateWorkout(workoutId, { exercises: nextExercises });
         return copyId;
     }
 
@@ -177,7 +179,7 @@ export class PresetStore {
         const trimmed = name.trim();
         if (!trimmed) return;
 
-        const preset: Preset = {
+        const workout: Workout = {
             id: crypto.randomUUID(),
             name: trimmed,
             tabType: tab,
@@ -185,7 +187,7 @@ export class PresetStore {
             exercises: [],
         };
 
-        this.presets = [...this.presets, preset];
+        this.workouts = [...this.workouts, workout];
         await this.save();
     }
 
@@ -193,18 +195,18 @@ export class PresetStore {
         const trimmed = name.trim();
         if (!trimmed) return;
 
-        this.presets = this.presets.map((p) => (p.id === id ? { ...p, name: trimmed } : p));
+        this.workouts = this.workouts.map((p) => (p.id === id ? { ...p, name: trimmed } : p));
         await this.save();
     }
 
     async remove(id: string): Promise<void> {
-        this.presets = this.presets.filter((p) => p.id !== id);
+        this.workouts = this.workouts.filter((p) => p.id !== id);
         await this.save();
     }
 
     async setMobilityRestBetweenExercises(id: string, seconds: number): Promise<void> {
         const v = clampInt(seconds, 0, 120);
-        this.presets = this.presets.map((p) =>
+        this.workouts = this.workouts.map((p) =>
             p.id === id ? { ...p, restBetweenExercisesSeconds: v } : p
         );
         await this.save();
@@ -212,9 +214,9 @@ export class PresetStore {
 
     // -------- Exercises (ordered) --------
 
-    async addExercise(presetId: string, name: string): Promise<void> {
-        const preset = this.getById(presetId);
-        if (!preset) return;
+    async addExercise(workoutId: string, name: string): Promise<void> {
+        const workout = this.getById(workoutId);
+        if (!workout) return;
 
         const trimmed = name.trim();
         if (!trimmed) return;
@@ -230,69 +232,69 @@ export class PresetStore {
             setupSeconds: undefined,
             restSecondsBetweenSets: 20,
             restSecondsBetweenSides: 10,
-            warmupSets: preset.tabType === TabType.Workout ? 2 : 0,
-            workingSets: preset.tabType === TabType.Workout ? 3 : 0,
+            warmupSets: workout.tabType === TabType.Workout ? 2 : 0,
+            workingSets: workout.tabType === TabType.Workout ? 3 : 0,
         };
 
-        await this.updatePreset(presetId, {
-            exercises: [...preset.exercises, ex],
+        await this.updateWorkout(workoutId, {
+            exercises: [...workout.exercises, ex],
         });
     }
 
-    async removeExercise(presetId: string, exerciseId: string): Promise<void> {
-        const preset = this.getById(presetId);
-        if (!preset) return;
+    async removeExercise(workoutId: string, exerciseId: string): Promise<void> {
+        const workout = this.getById(workoutId);
+        if (!workout) return;
 
-        await this.updatePreset(presetId, {
-            exercises: preset.exercises.filter((e) => e.id !== exerciseId),
+        await this.updateWorkout(workoutId, {
+            exercises: workout.exercises.filter((e) => e.id !== exerciseId),
         });
     }
 
-    async moveExercise(presetId: string, exerciseId: string, dir: -1 | 1): Promise<void> {
-        const preset = this.getById(presetId);
-        if (!preset) return;
+    async moveExercise(workoutId: string, exerciseId: string, dir: -1 | 1): Promise<void> {
+        const workout = this.getById(workoutId);
+        if (!workout) return;
 
-        const idx = preset.exercises.findIndex((e) => e.id === exerciseId);
+        const idx = workout.exercises.findIndex((e) => e.id === exerciseId);
         if (idx < 0) return;
 
         const next = idx + dir;
-        if (next < 0 || next >= preset.exercises.length) return;
+        if (next < 0 || next >= workout.exercises.length) return;
 
-        const copy = preset.exercises.slice();
+        const copy = workout.exercises.slice();
         const [item] = copy.splice(idx, 1);
         copy.splice(next, 0, item);
 
-        await this.updatePreset(presetId, { exercises: copy });
+        await this.updateWorkout(workoutId, { exercises: copy });
     }
 
-    async updateExercise(presetId: string, exercise: Exercise): Promise<void> {
-        const preset = this.getById(presetId);
-        if (!preset) return;
+    async updateExercise(workoutId: string, exercise: Exercise): Promise<void> {
+        const workout = this.getById(workoutId);
+        if (!workout) return;
 
-        const copy = preset.exercises.map((e) => (e.id === exercise.id ? normalizeExercise(exercise) : e));
-        await this.updatePreset(presetId, { exercises: copy });
+        const copy = workout.exercises.map((e) => (e.id === exercise.id ? normalizeExercise(exercise) : e));
+        await this.updateWorkout(workoutId, { exercises: copy });
     }
 
     // -------- internal helpers --------
 
-    private async updatePreset(id: string, patch: Partial<Preset>): Promise<void> {
-        this.presets = this.presets.map((p) => (p.id === id ? normalizePreset({ ...p, ...patch }) : p));
+    private async updateWorkout(id: string, patch: Partial<Workout>): Promise<void> {
+        this.workouts = this.workouts.map((p) => (p.id === id ? normalizeWorkout({ ...p, ...patch }) : p));
         await this.save();
     }
 
     private async save(): Promise<void> {
         try {
-            await idbSet(PRESETS_KEY, this.presets);
+            await idbSet(WORKOUTS_KEY, this.workouts);
         } catch {
             // IndexedDB may be blocked; still keep localStorage backup
         }
-        backupWrite(this.presets);
+        backupWrite(this.workouts);
         this.emit();
     }
 
 }
 
-function normalizePreset(p: any): Preset {
+function normalizeWorkout(p: any): Workout {
     return {
         id: String(p.id ?? crypto.randomUUID()),
         name: String(p.name ?? "Untitled"),

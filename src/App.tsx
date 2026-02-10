@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react";
 import { TabBar } from "./components/TabBar";
 import { ExecutionScreen } from "./components/ExecutionScreen";
-import { PresetList } from "./components/PresetList";
+import { WorkoutList } from "./components/WorkoutList";
 import { TabType } from "./models";
-import { PresetStore } from "./viewmodels/presetStore";
+import { WorkoutStore } from "./viewmodels/workoutStore";
 import { SessionEngine } from "./engine/sessionEngine";
 import { GlobalTimer } from "./engine/globalTimer";
 import { useGlobalTimer } from "./engine/useGlobalTimer";
 
 export default function App() {
-    const store = useMemo(() => new PresetStore(), []);
+    const store = useMemo(() => new WorkoutStore(), []);
 
     const preEngine = useMemo(() => new SessionEngine(TabType.PreMobility), []);
     const workoutEngine = useMemo(() => new SessionEngine(TabType.Workout), []);
@@ -66,9 +66,9 @@ export default function App() {
                     </div>
 
                     <details style={{ marginBottom: 12 }}>
-                        <summary style={{ cursor: "pointer" }}>Presets</summary>
+                        <summary style={{ cursor: "pointer" }}>Workouts</summary>
                         <div style={{ marginTop: 10 }}>
-                            <PresetList tab={tab} store={store} />
+                            <WorkoutList tab={tab} store={store} />
                         </div>
                     </details>
 

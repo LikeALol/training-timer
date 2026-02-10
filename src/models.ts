@@ -33,7 +33,7 @@ export type Exercise = {
     workingSets: number;  // workout only (0 otherwise)
 };
 
-export type Preset = {
+export type Workout = {
     id: string;
     name: string;
     tabType: TabType;

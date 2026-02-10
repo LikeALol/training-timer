@@ -1,11 +1,11 @@
-// src/io/presetIO.ts
-import type { Preset } from "../models";
+// src/io/workoutIO.ts
+import type { Workout } from "../models";
 import { TabType } from "../models";
 
-export type PresetsExportV1 = {
+export type WorkoutsExportV1 = {
     version: 1;
     exportedAt: string;
-    byTab: Record<string, Preset[]>;
+    byTab: Record<string, Workout[]>;
 };
 
 function downloadBlob(filename: string, blob: Blob) {
@@ -19,18 +19,18 @@ function downloadBlob(filename: string, blob: Blob) {
     URL.revokeObjectURL(url);
 }
 
-export function exportPresetsAsJson(byTab: Record<string, Preset[]>) {
-    const payload: PresetsExportV1 = {
+export function exportWorkoutsAsJson(byTab: Record<string, Workout[]>) {
+    const payload: WorkoutsExportV1 = {
         version: 1,
         exportedAt: new Date().toISOString(),
         byTab,
     };
 
     const json = JSON.stringify(payload, null, 2);
-    downloadBlob("presets.json", new Blob([json], { type: "application/json" }));
+    downloadBlob("workouts.json", new Blob([json], { type: "application/json" }));
 }
 
-export async function importPresetsFromJsonFile(file: File): Promise<Record<string, Preset[]>> {
+export async function importWorkoutsFromJsonFile(file: File): Promise<Record<string, Workout[]>> {
     const text = await file.text();
 
     let parsed: unknown;
@@ -44,23 +44,23 @@ export async function importPresetsFromJsonFile(file: File): Promise<Record<stri
         const obj = parsed as any;
 
         if (obj.version === 1 && obj.byTab && typeof obj.byTab === "object") {
-            const out: Record<string, Preset[]> = {};
+            const out: Record<string, Workout[]> = {};
             for (const key of [TabType.PreMobility, TabType.Workout, TabType.PostMobility]) {
                 const v = obj.byTab[key];
-                out[key] = Array.isArray(v) ? (v as Preset[]) : [];
+                out[key] = Array.isArray(v) ? (v as Workout[]) : [];
             }
             return out;
         }
 
         // legacy: { version:1, presets:[...] } -> put into workout by default
         if (obj.version === 1 && Array.isArray(obj.presets)) {
-            return { [TabType.Workout]: obj.presets as Preset[] };
+            return { [TabType.Workout]: obj.presets as Workout[] };
         }
     }
 
     // legacy: [...] -> put into workout by default
     if (Array.isArray(parsed)) {
-        return { [TabType.Workout]: parsed as Preset[] };
+        return { [TabType.Workout]: parsed as Workout[] };
     }
 
     throw new Error("JSON format not recognized.");

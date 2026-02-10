@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { PresetStore } from "../viewmodels/presetStore";
+import { WorkoutStore } from "../viewmodels/workoutStore";
 import { TabType } from "../models";
 import { useStoreSubscription } from "../viewmodels/useStore";
-import { PresetEditor } from "./PresetEditor";
-import { exportPresetsAsJson, importPresetsFromJsonFile } from "../io/presetIO";
+import { WorkoutEditor } from "./WorkoutEditor";
+import { exportWorkoutsAsJson, importWorkoutsFromJsonFile } from "../io/workoutIO";
 
-export function PresetList(props: { tab: TabType; store: PresetStore }) {
+export function WorkoutList(props: { tab: TabType; store: WorkoutStore }) {
     const { tab, store } = props;
 
     useStoreSubscription(store.subscribe.bind(store));
@@ -14,7 +14,7 @@ export function PresetList(props: { tab: TabType; store: PresetStore }) {
 
     const [loading, setLoading] = useState(true);
     const [newName, setNewName] = useState("");
-    const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+    const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null);
 
     useEffect(() => {
         let alive = true;
@@ -27,24 +27,24 @@ export function PresetList(props: { tab: TabType; store: PresetStore }) {
     }, [store]);
 
     useEffect(() => {
-        setEditingPresetId(null);
+        setEditingWorkoutId(null);
     }, [tab]);
 
     if (loading) return <div>Loading…</div>;
 
-    if (editingPresetId) {
+    if (editingWorkoutId) {
         return (
-            <PresetEditor
-                presetId={editingPresetId}
+            <WorkoutEditor
+                workoutId={editingWorkoutId}
                 tab={tab}
                 store={store}
-                onBack={() => setEditingPresetId(null)}
+                onBack={() => setEditingWorkoutId(null)}
             />
         );
     }
 
     const onExport = () => {
-        exportPresetsAsJson(store.exportAllByTab());
+        exportWorkoutsAsJson(store.exportAllByTab());
     };
 
     const onImport = () => {
@@ -56,10 +56,10 @@ export function PresetList(props: { tab: TabType; store: PresetStore }) {
         e.target.value = "";
         if (!file) return;
 
-        const byTab = await importPresetsFromJsonFile(file);
+        const byTab = await importWorkoutsFromJsonFile(file);
         await store.importAllByTab(byTab);
 
-        alert("Imported presets.");
+        alert("Imported workouts.");
     };
 
     return (
@@ -68,7 +68,7 @@ export function PresetList(props: { tab: TabType; store: PresetStore }) {
                 <input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder="New preset name"
+                    placeholder="New workout name"
                 />
                 <button
                     type="button"
@@ -95,13 +95,13 @@ export function PresetList(props: { tab: TabType; store: PresetStore }) {
             {/* Keep the rest of your list UI exactly as before */}
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
                 {store.list(tab).length === 0 ? (
-                    <div>No presets yet.</div>
+                    <div>No workouts yet.</div>
                 ) : (
                     store.list(tab).map((p) => (
                         <div key={p.id} style={{ border: "1px solid currentColor", padding: 12 }}>
                             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                                 <strong>{p.name}</strong>
-                                <button type="button" onClick={() => setEditingPresetId(p.id)}>
+                                <button type="button" onClick={() => setEditingWorkoutId(p.id)}>
                                     Edit
                                 </button>
                                 <button type="button" onClick={() => store.remove(p.id)}>
@@ -110,8 +110,8 @@ export function PresetList(props: { tab: TabType; store: PresetStore }) {
                                 <button
                                     type="button"
                                     onClick={async () => {
-                                        const newId = await store.duplicatePreset(p.id);
-                                        if (newId) setEditingPresetId(newId);
+                                        const newId = await store.duplicateWorkout(p.id);
+                                        if (newId) setEditingWorkoutId(newId);
                                     }}
                                 >
                                     Duplicate
