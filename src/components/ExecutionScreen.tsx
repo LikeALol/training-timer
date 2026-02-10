@@ -5,7 +5,6 @@ import { useStoreSubscription } from "../viewmodels/useStore";
 import type { SessionEngine } from "../engine/sessionEngine";
 import { SessionState } from "../engine/sessionEngine";
 import { useEngine } from "../engine/useEngine";
-import { buildMobilitySteps } from "../engine/mobilitySteps";
 import {
     buildWorkoutStepsForExercise,
     validateWorkoutExercise,
@@ -18,188 +17,12 @@ export function ExecutionScreen(props: {
     store: PresetStore;
     engine: SessionEngine;
 }) {
-    if (props.tab === TabType.Workout) return <WorkoutExecution {...props} />;
-    return <MobilityExecution {...props} />;
+    return <ExerciseExecution {...props} />;
 }
 
-/* ---------------- Mobility ---------------- */
+/* ---------------- Execution ---------------- */
 
-function MobilityExecution(props: {
-    tab: TabType;
-    store: PresetStore;
-    engine: SessionEngine;
-}) {
-    const { tab, store, engine } = props;
-
-    useStoreSubscription(store.subscribe.bind(store));
-    const snap = useEngine(engine);
-
-    const storageKey = `selectedPresetId.${tab}`;
-    const [selectedPresetId, setSelectedPresetId] = useState(
-        () => localStorage.getItem(storageKey) ?? ""
-    );
-
-    useEffect(() => {
-        setSelectedPresetId(localStorage.getItem(storageKey) ?? "");
-    }, [tab, storageKey]);
-
-    const presets = store.list(tab);
-    const selected = selectedPresetId
-        ? store.getById(selectedPresetId)
-        : undefined;
-
-    useEffect(() => {
-        if (selectedPresetId && !selected) {
-            localStorage.removeItem(storageKey);
-            setSelectedPresetId("");
-        }
-    }, [selectedPresetId, selected, storageKey]);
-
-    useEffect(() => {
-        const onVis = () =>
-            document.visibilityState === "visible"
-                ? engine.appBecameActive()
-                : engine.appWillResignActive();
-        document.addEventListener("visibilitychange", onVis);
-        return () => document.removeEventListener("visibilitychange", onVis);
-    }, [engine]);
-
-    const mobilityCountOk =
-        !!selected &&
-        selected.exercises.length >= 3 &&
-        selected.exercises.length <= 10;
-
-    const isIdle = snap.state === SessionState.Idle;
-    const isCompleted = snap.state === SessionState.Completed;
-    const canInteract = !isIdle && !isCompleted;
-    const isRepsStep = snap.currentStep?.kind === "awaitUserDone";
-
-    const confirmFullReset = () => window.confirm("Full reset the session?");
-
-    return (
-        <div>
-            <h2>Execution</h2>
-
-            <label>
-                Preset{" "}
-                <select
-                    value={selectedPresetId}
-                    onChange={(e) => {
-                        const v = e.target.value;
-                        setSelectedPresetId(v);
-                        v
-                            ? localStorage.setItem(storageKey, v)
-                            : localStorage.removeItem(storageKey);
-                        engine.fullReset();
-                    }}
-                >
-                    <option value="">None</option>
-                    {presets.map((p) => (
-                        <option key={p.id} value={p.id}>
-                            {p.name}
-                        </option>
-                    ))}
-                </select>
-            </label>
-
-            {!mobilityCountOk && selected && (
-                <div style={{ marginTop: 8 }}>
-                    Mobility preset must have 3–10 exercises.
-                </div>
-            )}
-
-            <ExecutionBox
-                snap={snap}
-                title={snap.currentStep?.exerciseName || selected?.name}
-                label={snap.currentStep?.label}
-            >
-                {isIdle && (
-                    <button
-                        style={{ flex: 1 }}
-                        disabled={!selected || !mobilityCountOk}
-                        onClick={() =>
-                            selected &&
-                            mobilityCountOk &&
-                            engine.startSession(buildMobilitySteps(selected))
-                        }
-                    >
-                        Start
-                    </button>
-                )}
-
-                {canInteract && isRepsStep && (
-                    <>
-                        <button style={{ flex: 1 }} onClick={() => engine.markDone()}>
-                            Done
-                        </button>
-                        <Row>
-                            <button
-                                type="button"
-                                style={{ flex: 1 }}
-                                onClick={() => engine.resetCurrentStep()}
-                            >
-                                Reset step
-                            </button>
-                            <button
-                                type="button"
-                                style={{ flex: 1 }}
-                                onClick={() => confirmFullReset() && engine.fullReset()}
-                            >
-                                Full reset
-                            </button>
-                        </Row>
-                    </>
-                )}
-
-                {canInteract && !isRepsStep && (
-                    <>
-                        <button
-                            style={{ flex: 1 }}
-                            onClick={() => (snap.isPaused ? engine.resume() : engine.pause())}
-                        >
-                            {snap.isPaused ? "Resume" : "Pause"}
-                        </button>
-                        <Row>
-                            <button
-                                type="button"
-                                style={{ flex: 1 }}
-                                onClick={() => engine.skip()}
-                            >
-                                Next
-                            </button>
-                            <button
-                                type="button"
-                                style={{ flex: 1 }}
-                                onClick={() => engine.resetCurrentStep()}
-                            >
-                                Reset step
-                            </button>
-                        </Row>
-                        <button
-                            style={{ flex: 1 }}
-                            onClick={() => confirmFullReset() && engine.fullReset()}
-                        >
-                            Full reset
-                        </button>
-                    </>
-                )}
-
-                {isCompleted && (
-                    <button
-                        style={{ flex: 1 }}
-                        onClick={() => confirmFullReset() && engine.fullReset()}
-                    >
-                        Full reset
-                    </button>
-                )}
-            </ExecutionBox>
-        </div>
-    );
-}
-
-/* ---------------- Workout ---------------- */
-
-function WorkoutExecution(props: {
+function ExerciseExecution(props: {
     tab: TabType;
     store: PresetStore;
     engine: SessionEngine;
@@ -224,6 +47,15 @@ function WorkoutExecution(props: {
         setExerciseId(localStorage.getItem(exerciseKey) ?? "");
     }, [tab, presetKey, exerciseKey]);
 
+    useEffect(() => {
+        const onVis = () =>
+            document.visibilityState === "visible"
+                ? engine.appBecameActive()
+                : engine.appWillResignActive();
+        document.addEventListener("visibilitychange", onVis);
+        return () => document.removeEventListener("visibilitychange", onVis);
+    }, [engine]);
+
     const presets = store.list(tab);
     const preset = presetId ? store.getById(presetId) : undefined;
     const exercises = preset?.exercises ?? [];
@@ -234,6 +66,7 @@ function WorkoutExecution(props: {
     const isIdle = snap.state === SessionState.Idle;
     const isCompleted = snap.state === SessionState.Completed;
     const isSetStep = snap.currentStep?.kind === "awaitUserDone";
+    const isRestStep = snap.currentStep?.kind === "restTimer";
 
     const error = exercise ? validateWorkoutExercise(exercise) : null;
     const canStart = !!exercise && !error && isIdle;
@@ -246,6 +79,52 @@ function WorkoutExecution(props: {
         if (idx < 0) return undefined;
         return exercises[idx + 1];
     })();
+    const previousExercise = (() => {
+        if (!exercise) return undefined;
+        const idx = exercises.findIndex((e) => e.id === exercise.id);
+        if (idx <= 0) return undefined;
+        return exercises[idx - 1];
+    })();
+
+    const upNextExerciseName = (() => {
+        if (!isRestStep) return undefined;
+
+        const nextStepName = snap.nextStep?.exerciseName?.trim();
+        if (nextStepName) return nextStepName;
+
+        const nextSelectedName = nextExercise?.name?.trim();
+        if (nextSelectedName) return nextSelectedName;
+
+        const currentName = exercise?.name?.trim();
+        return currentName || undefined;
+    })();
+
+    const canGoBackWithinExercise = !isIdle && (isCompleted || snap.stepIndex > 0);
+    const canGoBackToPreviousExercise =
+        !isIdle && !isCompleted && snap.stepIndex === 0 && !!previousExercise;
+    const canGoBack = canGoBackWithinExercise || canGoBackToPreviousExercise;
+
+    const goBack = () => {
+        if (canGoBackWithinExercise) {
+            engine.back();
+            return;
+        }
+
+        if (!canGoBackToPreviousExercise || !previousExercise) return;
+
+        const prevSteps = buildWorkoutStepsForExercise(previousExercise);
+        let targetIndex = prevSteps.length - 1;
+        for (let i = prevSteps.length - 1; i >= 0; i--) {
+            if (prevSteps[i]?.kind === "awaitUserDone") {
+                targetIndex = i;
+                break;
+            }
+        }
+
+        setExerciseId(previousExercise.id);
+        localStorage.setItem(exerciseKey, previousExercise.id);
+        engine.startSession(prevSteps, { preserveTotalElapsed: true, startIndex: targetIndex });
+    };
 
     return (
         <div>
@@ -261,8 +140,12 @@ function WorkoutExecution(props: {
                         v
                             ? localStorage.setItem(presetKey, v)
                             : localStorage.removeItem(presetKey);
-                        setExerciseId("");
-                        localStorage.removeItem(exerciseKey);
+                        const nextPreset = v ? store.getById(v) : undefined;
+                        const firstExerciseId = nextPreset?.exercises[0]?.id ?? "";
+                        setExerciseId(firstExerciseId);
+                        firstExerciseId
+                            ? localStorage.setItem(exerciseKey, firstExerciseId)
+                            : localStorage.removeItem(exerciseKey);
                         engine.fullReset();
                     }}
                 >
@@ -304,6 +187,7 @@ function WorkoutExecution(props: {
                 snap={snap}
                 title={snap.currentStep?.exerciseName || exercise?.name}
                 label={snap.currentStep?.label}
+                upNextExerciseName={upNextExerciseName}
             >
                 {isIdle && (
                     <button
@@ -326,18 +210,26 @@ function WorkoutExecution(props: {
                             <button
                                 type="button"
                                 style={{ flex: 1 }}
-                                onClick={() => engine.resetCurrentStep()}
+                                disabled={!canGoBack}
+                                onClick={goBack}
                             >
-                                Reset step
+                                Back
                             </button>
                             <button
                                 type="button"
                                 style={{ flex: 1 }}
-                                onClick={() => confirmFullReset() && engine.fullReset()}
+                                onClick={() => engine.resetCurrentStep()}
                             >
-                                Full reset
+                                Reset step
                             </button>
                         </Row>
+                        <button
+                            type="button"
+                            style={{ flex: 1 }}
+                            onClick={() => confirmFullReset() && engine.fullReset()}
+                        >
+                            Full reset
+                        </button>
                     </>
                 )}
 
@@ -353,10 +245,20 @@ function WorkoutExecution(props: {
                             <button
                                 type="button"
                                 style={{ flex: 1 }}
+                                disabled={!canGoBack}
+                                onClick={goBack}
+                            >
+                                Back
+                            </button>
+                            <button
+                                type="button"
+                                style={{ flex: 1 }}
                                 onClick={() => engine.skip()}
                             >
                                 Next
                             </button>
+                        </Row>
+                        <Row>
                             <button
                                 type="button"
                                 style={{ flex: 1 }}
@@ -364,13 +266,14 @@ function WorkoutExecution(props: {
                             >
                                 Reset step
                             </button>
+                            <button
+                                type="button"
+                                style={{ flex: 1 }}
+                                onClick={() => confirmFullReset() && engine.fullReset()}
+                            >
+                                Full reset
+                            </button>
                         </Row>
-                        <button
-                            style={{ flex: 1 }}
-                            onClick={() => confirmFullReset() && engine.fullReset()}
-                        >
-                            Full reset
-                        </button>
                     </>
                 )}
 
@@ -378,6 +281,14 @@ function WorkoutExecution(props: {
                     <>
                         {nextExercise && (
                             <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                    type="button"
+                                    style={{ flex: 1 }}
+                                    disabled={!canGoBack}
+                                    onClick={goBack}
+                                >
+                                    Back
+                                </button>
                                 <button
                                     type="button"
                                     style={{ flex: 1 }}
@@ -392,6 +303,18 @@ function WorkoutExecution(props: {
                                     }}
                                 >
                                     Next Exercise
+                                </button>
+                            </div>
+                        )}
+                        {!nextExercise && (
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                    type="button"
+                                    style={{ flex: 1 }}
+                                    disabled={!canGoBack}
+                                    onClick={goBack}
+                                >
+                                    Back
                                 </button>
                             </div>
                         )}
@@ -420,9 +343,10 @@ function ExecutionBox(props: {
     snap: any;
     title?: string;
     label?: string;
+    upNextExerciseName?: string;
     children: React.ReactNode;
 }) {
-    const { snap, title, label, children } = props;
+    const { snap, title, label, upNextExerciseName, children } = props;
 
     return (
         <div style={{ marginTop: 12, border: "1px solid currentColor", padding: 12 }}>
@@ -445,6 +369,11 @@ function ExecutionBox(props: {
 
             <div style={{ textAlign: "center", fontWeight: 600 }}>{title ?? "-"}</div>
             <div style={{ textAlign: "center", marginBottom: 12 }}>{label ?? "-"}</div>
+            {upNextExerciseName && (
+                <div style={{ textAlign: "center", marginBottom: 12 }}>
+                    Up next: <strong>{upNextExerciseName}</strong>
+                </div>
+            )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {children}

@@ -106,6 +106,7 @@ export class SessionEngine {
     // ---- read-only view of engine state (UI consumes this) ----
     getSnapshot() {
         const step = this.steps[this.index];
+        const nextStep = this.steps[this.index + 1];
         const now = Date.now();
 
         const elapsedMs =
@@ -131,6 +132,7 @@ export class SessionEngine {
             state: this.state,
             isPaused: this.isPaused,
             currentStep: step ?? null,
+            nextStep: nextStep ?? null,
             stepIndex: this.index,
             stepCount: this.steps.length,
             timeRemainingSeconds,
@@ -141,9 +143,12 @@ export class SessionEngine {
     }
 
     // ---- mobility/workout: start a session with prebuilt steps ----
-    startSession(steps: SessionStep[], opts?: { preserveTotalElapsed?: boolean }) {
+    startSession(steps: SessionStep[], opts?: { preserveTotalElapsed?: boolean; startIndex?: number }) {
         this.steps = steps;
-        this.index = 0;
+        const requestedStart = Number.isFinite(opts?.startIndex)
+            ? Math.floor(opts?.startIndex ?? 0)
+            : 0;
+        this.index = Math.max(0, Math.min(requestedStart, Math.max(0, steps.length - 1)));
 
         this.state = SessionState.Transition;
         this.isPaused = false;
@@ -451,6 +456,32 @@ export class SessionEngine {
     skip() {
         if (this.state === SessionState.Completed || this.state === SessionState.Idle) return;
         this.advance();
+    }
+
+    // Go back one step when possible.
+    back() {
+        if (this.state === SessionState.Idle) return;
+        if (this.steps.length === 0) return;
+
+        let target = this.index;
+
+        if (this.state === SessionState.Completed) {
+            if (target >= this.steps.length) target = this.steps.length - 1;
+            if (target > 0 && this.steps[target]?.kind === StepKind.Completed) target -= 1;
+        } else {
+            target -= 1;
+        }
+
+        if (target < 0) return;
+
+        this.index = target;
+        this.state = SessionState.Transition;
+        this.isPaused = false;
+        this.targetTimeMs = undefined;
+        this.remainingSecondsWhenPaused = undefined;
+        this.enterCurrentStep();
+        this.persist();
+        this.emit();
     }
 
     // ---- persistence ----

@@ -4,12 +4,10 @@ import type { SessionStep } from "./sessionEngine";
 
 export function validateWorkoutExercise(ex: Exercise): string | null {
     const reps = clampInt(ex.reps, 0, 500);
-    const warmups = clampInt(ex.warmupSets, 0, 20);
-    const working = clampInt(ex.workingSets, 0, 50);
+    const { warmups, working } = resolveWorkoutSetCounts(ex);
 
     if (reps < 1) return "Reps must be at least 1.";
     if (warmups + working < 1) return "Warm-up sets + working sets must be at least 1.";
-    if (working < 1) return "Working sets must be at least 1.";
 
     return null;
 }
@@ -41,8 +39,7 @@ export function buildWorkoutStepsForExercise(ex: Exercise): SessionStep[] {
         });
     }
 
-    const warmups = clampInt(ex.warmupSets, 0, 20);
-    const working = clampInt(ex.workingSets, 0, 50);
+    const { warmups, working, usesLegacySets } = resolveWorkoutSetCounts(ex);
     const reps = clampInt(ex.reps, 1, 500);
 
     const total = warmups + working;
@@ -68,9 +65,11 @@ export function buildWorkoutStepsForExercise(ex: Exercise): SessionStep[] {
         // Convention:
         // warm-up rest = restSecondsBetweenSets
         // working rest = restSecondsBetweenSides
-        const restSeconds = isWarmup
+        const restSeconds = usesLegacySets
             ? clampInt(ex.restSecondsBetweenSets, 0, 3600)
-            : clampInt(ex.restSecondsBetweenSides, 0, 3600);
+            : isWarmup
+              ? clampInt(ex.restSecondsBetweenSets, 0, 3600)
+              : clampInt(ex.restSecondsBetweenSides, 0, 3600);
 
         if (restSeconds > 0) {
             out.push({
@@ -98,4 +97,20 @@ function clampInt(v: any, min: number, max: number): number {
     const n = Math.floor(Number(v));
     if (!Number.isFinite(n)) return min;
     return Math.max(min, Math.min(max, n));
+}
+
+function resolveWorkoutSetCounts(ex: Exercise): {
+    warmups: number;
+    working: number;
+    usesLegacySets: boolean;
+} {
+    const warmups = clampInt(ex.warmupSets, 0, 20);
+    const working = clampInt(ex.workingSets, 0, 50);
+
+    if (warmups + working > 0) {
+        return { warmups, working, usesLegacySets: false };
+    }
+
+    // Backward-compat: older/non-workout exercises may only define `sets`.
+    return { warmups: 0, working: clampInt(ex.sets, 1, 50), usesLegacySets: true };
 }
