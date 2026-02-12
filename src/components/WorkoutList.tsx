@@ -228,20 +228,22 @@ export function WorkoutList(props: { tab: TabType; store: WorkoutStore }) {
                                             >
                                                 Duplicate
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={async () => {
-                                                    const planId = await store.createPlanFromWorkout(p.id);
-                                                    if (planId) {
-                                                        setWorkoutsView("plans");
-                                                        setEditingWorkoutId(planId);
-                                                        setStartAddExerciseWorkoutId(null);
-                                                        setEditorView("plans");
-                                                    }
-                                                }}
-                                            >
-                                                Create plan from workout
-                                            </button>
+                                            {plansEnabled && (
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        const planId = await store.createPlanFromWorkout(p.id);
+                                                        if (planId) {
+                                                            setWorkoutsView("plans");
+                                                            setEditingWorkoutId(planId);
+                                                            setStartAddExerciseWorkoutId(null);
+                                                            setEditorView("plans");
+                                                        }
+                                                    }}
+                                                >
+                                                    Create plan from workout
+                                                </button>
+                                            )}
                                         </>
                                     ) : (
                                         <>
