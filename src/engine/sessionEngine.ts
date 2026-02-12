@@ -255,7 +255,15 @@ export class SessionEngine {
         this.emit();
     }
 
-    fullReset() {
+    fullReset(opts?: { preserveTotalElapsed?: boolean }) {
+        const preserveTotal = opts?.preserveTotalElapsed === true;
+        const now = Date.now();
+        let preservedElapsedBeforePauseMs = this.elapsedBeforePauseMs;
+
+        if (preserveTotal && this.startedAtMs != null && !this.isPaused) {
+            preservedElapsedBeforePauseMs += now - this.startedAtMs;
+        }
+
         this.state = SessionState.Idle;
         this.steps = [];
         this.index = 0;
@@ -266,7 +274,7 @@ export class SessionEngine {
         this.remainingSecondsWhenPaused = undefined;
 
         this.startedAtMs = undefined;
-        this.elapsedBeforePauseMs = 0;
+        this.elapsedBeforePauseMs = preserveTotal ? preservedElapsedBeforePauseMs : 0;
 
         this.stepStartedAtMs = undefined;
         this.stepElapsedBeforePauseMs = 0;
@@ -274,9 +282,13 @@ export class SessionEngine {
         this.exerciseStartedAtMs = undefined;
         this.exerciseElapsedBeforePauseMs = 0;
 
-        try {
-            localStorage.removeItem(this.storageKey);
-        } catch {}
+        if (preserveTotal) {
+            this.persist();
+        } else {
+            try {
+                localStorage.removeItem(this.storageKey);
+            } catch {}
+        }
 
         this.emit();
     }

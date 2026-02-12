@@ -74,7 +74,12 @@ export default function App() {
 
                     <hr />
 
-                    <ExecutionScreen tab={tab} store={store} engine={engine} />
+                    <details style={{ marginTop: 12 }} open>
+                        <summary style={{ cursor: "pointer" }}>Execution</summary>
+                        <div style={{ marginTop: 10 }}>
+                            <ExecutionScreen tab={tab} store={store} engine={engine} />
+                        </div>
+                    </details>
                 </div>
             </div>
 

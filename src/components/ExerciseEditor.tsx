@@ -5,17 +5,36 @@ import type { Exercise } from "../models";
 export function ExerciseEditor(props: {
     tab: TabType;
     exercise: Exercise | null;
+    title?: string;
     onBack: () => void;
     onSave: (e: Exercise) => void;
 }) {
-    const { tab, exercise, onBack, onSave } = props;
+    const { tab, exercise, title, onBack, onSave } = props;
 
     const [draft, setDraft] = useState<Exercise | null>(() =>
-        exercise ? { ...exercise, mode: exercise.mode ?? ExerciseMode.Reps } : null
+        exercise
+            ? {
+                ...exercise,
+                mode: exercise.mode ?? ExerciseMode.Reps,
+                intensity: exercise.intensity ?? "",
+                weight: exercise.weight ?? "",
+                tempo: normalizeTempo(exercise.tempo),
+            }
+            : null
     );
 
     useEffect(() => {
-        setDraft(exercise ? { ...exercise, mode: exercise.mode ?? ExerciseMode.Reps } : null);
+        setDraft(
+            exercise
+                ? {
+                    ...exercise,
+                    mode: exercise.mode ?? ExerciseMode.Reps,
+                    intensity: exercise.intensity ?? "",
+                    weight: exercise.weight ?? "",
+                    tempo: normalizeTempo(exercise.tempo),
+                }
+                : null
+        );
     }, [exercise?.id]);
 
     if (!draft) {
@@ -29,11 +48,12 @@ export function ExerciseEditor(props: {
 
     const isWorkout = tab === TabType.Workout;
     const derivedSets = isWorkout ? draft.warmupSets + draft.workingSets : draft.sets;
+    const tempoError = validateTempo(draft.tempo);
 
     return (
         <div>
             <button type="button" onClick={onBack}>Back</button>
-            <h2 style={{ marginTop: 12 }}>Edit Exercise</h2>
+            <h2 style={{ marginTop: 12 }}>{title ?? "Edit Exercise"}</h2>
 
             <div style={{ border: "1px solid currentColor", padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
                 <label>
@@ -86,6 +106,35 @@ export function ExerciseEditor(props: {
                         }
                     />
                 </label>
+
+                <label>
+                    Intensity (RPE/%/text){" "}
+                    <input
+                        value={draft.intensity}
+                        onChange={(e) => setDraft({ ...draft, intensity: e.target.value })}
+                    />
+                </label>
+
+                <label>
+                    Weight{" "}
+                    <input
+                        value={draft.weight}
+                        onChange={(e) => setDraft({ ...draft, weight: e.target.value })}
+                    />
+                </label>
+
+                <label>
+                    Tempo (n.n.n or x){" "}
+                    <input
+                        value={draft.tempo}
+                        onChange={(e) => setDraft({ ...draft, tempo: e.target.value })}
+                    />
+                </label>
+                {tempoError && (
+                    <div style={{ fontSize: 12 }}>
+                        {tempoError}
+                    </div>
+                )}
                 <label>
                     <input
                         type="checkbox"
@@ -152,7 +201,11 @@ export function ExerciseEditor(props: {
                     </>
                 )}
 
-                <button type="button" onClick={() => onSave(sanitize(draft, isWorkout))}>
+                <button
+                    type="button"
+                    disabled={!!tempoError}
+                    onClick={() => onSave(sanitize(draft, isWorkout))}
+                >
                     Save
                 </button>
             </div>
@@ -189,6 +242,23 @@ function sanitize(e: Exercise, isWorkout: boolean): Exercise {
         restSecondsBetweenSides: Math.max(0, Math.floor(e.restSecondsBetweenSides)),
         warmupSets,
         workingSets,
+        intensity: e.intensity.trim(),
+        weight: e.weight.trim(),
+        tempo: normalizeTempo(e.tempo),
         setupSeconds: (e.setupSeconds == null || e.setupSeconds === 0) ? undefined : Math.max(1, Math.floor(e.setupSeconds)),
     };
+}
+
+function validateTempo(v: string): string | null {
+    const t = v.trim().toLowerCase();
+    if (t === "x") return null;
+    if (/^\d+\.\d+\.\d+$/.test(t)) return null;
+    return "Tempo must be 'x' or in n.n.n format (example: 3.1.1).";
+}
+
+function normalizeTempo(v: string): string {
+    const t = v.trim().toLowerCase();
+    if (t === "x") return "x";
+    if (/^\d+\.\d+\.\d+$/.test(t)) return t;
+    return "x";
 }

@@ -1,6 +1,6 @@
 import { idbGet, idbSet } from "../persistence/idb";
 import { TabType } from "../models";
-import type { Workout, Exercise } from "../models";
+import type { Workout, Exercise, WorkoutDayPlan, WorkoutDayEntry, WorkoutKind } from "../models";
 import { ExerciseMode as ExerciseModeValue } from "../models";
 
 type Listener = () => void;
@@ -86,8 +86,19 @@ export class WorkoutStore {
     }
 
     list(tab: TabType): Workout[] {
+        return this.listIndividuals(tab);
+    }
+
+    listIndividuals(tab: TabType): Workout[] {
         return this.workouts
-            .filter((p) => p.tabType === tab)
+            .filter((p) => p.tabType === tab && p.kind === "individual")
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    listPlans(tab: TabType): Workout[] {
+        return this.workouts
+            .filter((p) => p.tabType === tab && p.kind === "plan")
             .slice()
             .sort((a, b) => a.name.localeCompare(b.name));
     }
@@ -126,16 +137,30 @@ export class WorkoutStore {
         if (!src) return null;
 
         const copyId = crypto.randomUUID();
+        const exerciseIdMap = new Map<string, string>();
+        const copiedExercises = src.exercises.map((ex) => {
+            const copiedExerciseId = crypto.randomUUID();
+            exerciseIdMap.set(ex.id, copiedExerciseId);
+            return {
+                ...ex,
+                id: copiedExerciseId,
+                name: ex.name,
+            };
+        });
+        const copiedDayPlans = src.dayPlans.map((day) => ({
+            day: day.day,
+            entries: day.entries.map((entry) => ({
+                ...entry,
+                exerciseId: exerciseIdMap.get(entry.exerciseId) ?? entry.exerciseId,
+            })),
+        }));
 
         const copy: Workout = normalizeWorkout({
             ...src,
             id: copyId,
             name: `${src.name} (copy)`,
-            exercises: src.exercises.map((ex) => ({
-                ...ex,
-                id: crypto.randomUUID(),
-                name: ex.name,
-            })),
+            exercises: copiedExercises,
+            dayPlans: copiedDayPlans,
         });
 
         const idx = this.workouts.findIndex((p) => p.id === workoutId);
@@ -170,25 +195,40 @@ export class WorkoutStore {
         const nextExercises = workout.exercises.slice();
         nextExercises.splice(idx + 1, 0, copy);
 
-        await this.updateWorkout(workoutId, { exercises: nextExercises });
+        const nextDayPlans = workout.dayPlans.map((day) => {
+            const sourceEntry = day.entries.find((entry) => entry.exerciseId === exerciseId);
+            const copiedEntry = sourceEntry
+                ? { ...sourceEntry, exerciseId: copyId }
+                : createDefaultWorkoutDayEntry(copy);
+            return {
+                day: day.day,
+                entries: [...day.entries, copiedEntry],
+            };
+        });
+
+        await this.updateWorkout(workoutId, { exercises: nextExercises, dayPlans: nextDayPlans });
         return copyId;
     }
 
 
-    async create(tab: TabType, name: string): Promise<void> {
+    async create(tab: TabType, name: string): Promise<string | null> {
         const trimmed = name.trim();
-        if (!trimmed) return;
+        if (!trimmed) return null;
 
         const workout: Workout = {
             id: crypto.randomUUID(),
             name: trimmed,
             tabType: tab,
+            kind: "individual",
             restBetweenExercisesSeconds: 25,
             exercises: [],
+            repeatCount: 1,
+            dayPlans: [],
         };
 
         this.workouts = [...this.workouts, workout];
         await this.save();
+        return workout.id;
     }
 
     async rename(id: string, name: string): Promise<void> {
@@ -212,6 +252,53 @@ export class WorkoutStore {
         await this.save();
     }
 
+    async updateWorkoutProgramming(
+        workoutId: string,
+        repeatCount: number,
+        dayPlans: WorkoutDayPlan[]
+    ): Promise<void> {
+        await this.updateWorkout(workoutId, {
+            repeatCount: clampInt(repeatCount, 1, 4),
+            dayPlans,
+        });
+    }
+
+    async createPlanFromWorkout(workoutId: string): Promise<string | null> {
+        const src = this.getById(workoutId);
+        if (!src) return null;
+
+        const copyId = crypto.randomUUID();
+        const exerciseIdMap = new Map<string, string>();
+        const copiedExercises = src.exercises.map((ex) => {
+            const copiedExerciseId = crypto.randomUUID();
+            exerciseIdMap.set(ex.id, copiedExerciseId);
+            return {
+                ...ex,
+                id: copiedExerciseId,
+            };
+        });
+        const copiedDayPlans = src.dayPlans.map((day) => ({
+            day: day.day,
+            entries: day.entries.map((entry) => ({
+                ...entry,
+                exerciseId: exerciseIdMap.get(entry.exerciseId) ?? entry.exerciseId,
+            })),
+        }));
+
+        const plan: Workout = normalizeWorkout({
+            ...src,
+            id: copyId,
+            name: `${src.name} Plan`,
+            kind: "plan",
+            exercises: copiedExercises,
+            dayPlans: copiedDayPlans,
+        });
+
+        this.workouts = [...this.workouts, plan];
+        await this.save();
+        return copyId;
+    }
+
     // Backward-compatible alias.
     async setMobilityRestBetweenExercises(id: string, seconds: number): Promise<void> {
         await this.setRestBetweenExercises(id, seconds);
@@ -219,12 +306,12 @@ export class WorkoutStore {
 
     // -------- Exercises (ordered) --------
 
-    async addExercise(workoutId: string, name: string): Promise<void> {
+    async addExercise(workoutId: string, name: string): Promise<string | null> {
         const workout = this.getById(workoutId);
-        if (!workout) return;
+        if (!workout) return null;
 
         const trimmed = name.trim();
-        if (!trimmed) return;
+        if (!trimmed) return null;
 
         const ex: Exercise = {
             id: crypto.randomUUID(),
@@ -239,19 +326,56 @@ export class WorkoutStore {
             restSecondsBetweenSides: 10,
             warmupSets: workout.tabType === TabType.Workout ? 2 : 0,
             workingSets: workout.tabType === TabType.Workout ? 3 : 0,
+            intensity: "",
+            weight: "",
+            tempo: "x",
         };
+
+        const nextDayPlans = workout.dayPlans.map((day) => ({
+            day: day.day,
+            entries: [...day.entries, createDefaultWorkoutDayEntry(ex)],
+        }));
 
         await this.updateWorkout(workoutId, {
             exercises: [...workout.exercises, ex],
+            dayPlans: nextDayPlans,
         });
+        return ex.id;
+    }
+
+    async addExerciseWithValues(workoutId: string, exercise: Exercise): Promise<string | null> {
+        const workout = this.getById(workoutId);
+        if (!workout) return null;
+
+        const nextExercise: Exercise = normalizeExercise({
+            ...exercise,
+            id: exercise.id || crypto.randomUUID(),
+        });
+
+        const nextDayPlans = workout.dayPlans.map((day) => ({
+            day: day.day,
+            entries: [...day.entries, createDefaultWorkoutDayEntry(nextExercise)],
+        }));
+
+        await this.updateWorkout(workoutId, {
+            exercises: [...workout.exercises, nextExercise],
+            dayPlans: nextDayPlans,
+        });
+        return nextExercise.id;
     }
 
     async removeExercise(workoutId: string, exerciseId: string): Promise<void> {
         const workout = this.getById(workoutId);
         if (!workout) return;
 
+        const nextDayPlans = workout.dayPlans.map((day) => ({
+            day: day.day,
+            entries: day.entries.filter((entry) => entry.exerciseId !== exerciseId),
+        }));
+
         await this.updateWorkout(workoutId, {
             exercises: workout.exercises.filter((e) => e.id !== exerciseId),
+            dayPlans: nextDayPlans,
         });
     }
 
@@ -269,7 +393,8 @@ export class WorkoutStore {
         const [item] = copy.splice(idx, 1);
         copy.splice(next, 0, item);
 
-        await this.updateWorkout(workoutId, { exercises: copy });
+        const dayPlans = reorderDayPlanEntries(workout.dayPlans, copy);
+        await this.updateWorkout(workoutId, { exercises: copy, dayPlans });
     }
 
     async updateExercise(workoutId: string, exercise: Exercise): Promise<void> {
@@ -300,12 +425,18 @@ export class WorkoutStore {
 }
 
 function normalizeWorkout(p: any): Workout {
+    const exercises = Array.isArray(p.exercises) ? p.exercises.map(normalizeExercise) : [];
+    const repeatCount = clampInt(p.repeatCount ?? 1, 1, 4);
+    const kind: WorkoutKind = p?.kind === "plan" ? "plan" : "individual";
     return {
         id: String(p.id ?? crypto.randomUUID()),
         name: String(p.name ?? "Untitled"),
         tabType: (p.tabType === TabType.Workout || p.tabType === TabType.PostMobility) ? p.tabType : TabType.PreMobility,
+        kind,
         restBetweenExercisesSeconds: clampInt(p.restBetweenExercisesSeconds ?? 25, 0, 120),
-        exercises: Array.isArray(p.exercises) ? p.exercises.map(normalizeExercise) : [],
+        exercises,
+        repeatCount,
+        dayPlans: normalizeWorkoutDayPlans(p.dayPlans, exercises, repeatCount),
     };
 }
 
@@ -325,7 +456,100 @@ function normalizeExercise(e: any): Exercise {
         restSecondsBetweenSides: clampInt(e?.restSecondsBetweenSides ?? 10, 0, 3600),
         warmupSets: clampInt(e?.warmupSets ?? 0, 0, 20),
         workingSets: clampInt(e?.workingSets ?? 0, 0, 50),
+        intensity: String(e?.intensity ?? "").trim(),
+        weight: String(e?.weight ?? "").trim(),
+        tempo: normalizeTempo(e?.tempo),
     };
+}
+
+function normalizeWorkoutDayPlans(
+    rawDayPlans: any,
+    exercises: Exercise[],
+    repeatCount: number
+): WorkoutDayPlan[] {
+    const sourceByDay = new Map<number, any>();
+    if (Array.isArray(rawDayPlans)) {
+        for (const rawPlan of rawDayPlans) {
+            const day = clampInt(rawPlan?.day, 1, 4);
+            if (!sourceByDay.has(day)) sourceByDay.set(day, rawPlan);
+        }
+    }
+
+    const out: WorkoutDayPlan[] = [];
+
+    for (let day = 1; day <= repeatCount; day++) {
+        const sourcePlan = sourceByDay.get(day);
+        const sourceEntriesByExerciseId = new Map<string, any>();
+        if (Array.isArray(sourcePlan?.entries)) {
+            for (const entry of sourcePlan.entries) {
+                const exerciseId = String(entry?.exerciseId ?? "");
+                if (!exerciseId || sourceEntriesByExerciseId.has(exerciseId)) continue;
+                sourceEntriesByExerciseId.set(exerciseId, entry);
+            }
+        }
+
+        const entries = exercises.map((exercise) => {
+            const sourceEntry = sourceEntriesByExerciseId.get(exercise.id);
+            return normalizeWorkoutDayEntry(sourceEntry, exercise);
+        });
+
+        out.push({ day, entries });
+    }
+
+    return out;
+}
+
+function normalizeWorkoutDayEntry(source: any, exercise: Exercise): WorkoutDayEntry {
+    const warmupSets = clampInt(source?.warmupSets ?? exercise.warmupSets, 0, 20);
+    const defaultWorkingSets = Math.max(1, clampInt(exercise.workingSets, 1, 50));
+    const sets = clampInt(source?.sets ?? defaultWorkingSets, 1, 70);
+    const reps = clampInt(source?.reps ?? exercise.reps, 1, 500);
+    const intensity = String(source?.intensity ?? exercise.intensity ?? "").trim();
+    const weight = String(source?.weight ?? exercise.weight ?? "").trim();
+    const tempo = normalizeTempo(source?.tempo ?? exercise.tempo);
+    const warmupRestSeconds = clampInt(
+        source?.warmupRestSeconds ?? source?.restSecondsBetweenSets ?? exercise.restSecondsBetweenSets,
+        0,
+        3600
+    );
+    const workingRestSeconds = clampInt(
+        source?.workingRestSeconds ?? source?.restSecondsBetweenSides ?? exercise.restSecondsBetweenSides,
+        0,
+        3600
+    );
+    const restSeconds = clampInt(source?.restSeconds ?? workingRestSeconds, 0, 3600);
+
+    return {
+        exerciseId: exercise.id,
+        warmupSets,
+        sets,
+        reps,
+        intensity,
+        weight,
+        tempo,
+        warmupRestSeconds,
+        workingRestSeconds,
+        restSeconds,
+    };
+}
+
+function normalizeTempo(v: any): string {
+    const t = String(v ?? "").trim().toLowerCase();
+    if (t === "x") return "x";
+    if (/^\d+\.\d+\.\d+$/.test(t)) return t;
+    return "x";
+}
+
+function createDefaultWorkoutDayEntry(exercise: Exercise): WorkoutDayEntry {
+    return normalizeWorkoutDayEntry(undefined, exercise);
+}
+
+function reorderDayPlanEntries(dayPlans: WorkoutDayPlan[], exercises: Exercise[]): WorkoutDayPlan[] {
+    return dayPlans.map((day) => {
+        const byExerciseId = new Map(day.entries.map((entry) => [entry.exerciseId, entry] as const));
+        const entries = exercises.map((exercise) => byExerciseId.get(exercise.id) ?? createDefaultWorkoutDayEntry(exercise));
+        return { day: day.day, entries };
+    });
 }
 
 function clampInt(v: any, min: number, max: number): number {

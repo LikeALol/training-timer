@@ -12,6 +12,7 @@ export const ExerciseMode = {
 } as const;
 
 export type ExerciseMode = typeof ExerciseMode[keyof typeof ExerciseMode];
+export type WorkoutKind = "individual" | "plan";
 
 export type Exercise = {
     id: string;
@@ -31,14 +32,39 @@ export type Exercise = {
 
     warmupSets: number;   // workout only (0 otherwise)
     workingSets: number;  // workout only (0 otherwise)
+
+    intensity: string; // e.g. "RPE 8" or "75%"
+    weight: string;    // e.g. "100kg", "225 lb"
+    tempo: string;     // "n.n.n" or "x"
+};
+
+export type WorkoutDayEntry = {
+    exerciseId: string;
+    warmupSets: number;
+    sets: number;
+    reps: number;
+    intensity: string;
+    weight: string;
+    tempo: string;
+    warmupRestSeconds: number;
+    workingRestSeconds: number;
+    restSeconds: number;
+};
+
+export type WorkoutDayPlan = {
+    day: number;
+    entries: WorkoutDayEntry[];
 };
 
 export type Workout = {
     id: string;
     name: string;
     tabType: TabType;
+    kind: WorkoutKind;
 
     restBetweenExercisesSeconds: number; // mobility only
 
     exercises: Exercise[]; // ORDERED
+    repeatCount: number;   // 1..4
+    dayPlans: WorkoutDayPlan[];
 };
