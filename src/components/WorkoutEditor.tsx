@@ -232,8 +232,9 @@ export function WorkoutEditor(props: {
                                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                         <thead>
                                             <tr>
-                                                <th style={{ textAlign: "left", padding: 4 }}>Exercise</th>
-                                                <th style={{ textAlign: "left", padding: 4 }}>Sets</th>
+                                                <th style={{ textAlign: "left", padding: 4 }}>Exercise name</th>
+                                                <th style={{ textAlign: "left", padding: 4 }}>Warm-up sets</th>
+                                                <th style={{ textAlign: "left", padding: 4 }}>Working sets</th>
                                                 <th style={{ textAlign: "left", padding: 4 }}>Reps</th>
                                                 <th style={{ textAlign: "left", padding: 4 }}>Intensity</th>
                                                 <th style={{ textAlign: "left", padding: 4 }}>Weight</th>
@@ -248,7 +249,29 @@ export function WorkoutEditor(props: {
                                                     ?? createDefaultDayEntry(exercise);
                                                 return (
                                                     <tr key={`${plan.day}-${exercise.id}`}>
-                                                        <td style={{ padding: 4 }}>{exercise.name}</td>
+                                                        <td style={{ padding: 4 }}>
+                                                            <input
+                                                                value={entry.exerciseName}
+                                                                onChange={(e) =>
+                                                                    updateDayEntry(plan.day, exercise.id, {
+                                                                        exerciseName: e.target.value,
+                                                                    })
+                                                                }
+                                                                style={{ width: 180 }}
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: 4 }}>
+                                                            <input
+                                                                inputMode="numeric"
+                                                                value={String(entry.warmupSets)}
+                                                                onChange={(e) =>
+                                                                    updateDayEntry(plan.day, exercise.id, {
+                                                                        warmupSets: clampInt(e.target.value, 0, 20),
+                                                                    })
+                                                                }
+                                                                style={{ width: 70 }}
+                                                            />
+                                                        </td>
                                                         <td style={{ padding: 4 }}>
                                                             <input
                                                                 inputMode="numeric"
@@ -359,6 +382,7 @@ function createDefaultDayEntry(exercise: Exercise): WorkoutDayEntry {
     const sets = Math.max(1, exercise.workingSets || exercise.sets);
     return {
         exerciseId: exercise.id,
+        exerciseName: exercise.name,
         warmupSets: Math.max(0, exercise.warmupSets),
         sets,
         reps: Math.max(1, exercise.reps),
@@ -389,6 +413,7 @@ function buildDayPlansFromWorkout(
             if (!sourceEntry) return createDefaultDayEntry(exercise);
             return {
                 ...sourceEntry,
+                exerciseName: String(sourceEntry.exerciseName ?? exercise.name ?? "").trim() || "Exercise",
                 warmupSets: clampInt(sourceEntry.warmupSets, 0, 20),
                 sets: clampInt(sourceEntry.sets, 1, 70),
                 reps: clampInt(sourceEntry.reps, 1, 500),

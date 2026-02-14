@@ -40,6 +40,7 @@ export type Exercise = {
 
 export type WorkoutDayEntry = {
     exerciseId: string;
+    exerciseName: string;
     warmupSets: number;
     sets: number;
     reps: number;

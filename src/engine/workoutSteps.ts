@@ -3,23 +3,35 @@ import type { Exercise } from "../models";
 import { StepKind } from "./sessionEngine";
 import type { SessionStep } from "./sessionEngine";
 
-export function validateWorkoutExercise(ex: Exercise): string | null {
+export type WorkoutSetStyle = "workout" | "mobility";
+
+export function validateWorkoutExercise(
+    ex: Exercise,
+    setStyle: WorkoutSetStyle = "workout"
+): string | null {
     const reps = clampInt(ex.reps, 0, 500);
     const durationSeconds = clampInt(ex.durationSeconds, 0, 3600);
-    const { warmups, working } = resolveWorkoutSetCounts(ex);
+    const { warmups, working } = resolveWorkoutSetCounts(ex, setStyle);
 
     if (ex.mode === ExerciseMode.Time) {
         if (durationSeconds < 1) return "Duration must be at least 1 second.";
     } else if (reps < 1) {
         return "Reps must be at least 1.";
     }
-    if (warmups + working < 1) return "Warm-up sets + working sets must be at least 1.";
+    if (warmups + working < 1) {
+        return setStyle === "workout"
+            ? "Warm-up sets + working sets must be at least 1."
+            : "Sets must be at least 1.";
+    }
 
     return null;
 }
 
-export function buildWorkoutStepsForExercise(ex: Exercise): SessionStep[] {
-    const err = validateWorkoutExercise(ex);
+export function buildWorkoutStepsForExercise(
+    ex: Exercise,
+    setStyle: WorkoutSetStyle = "workout"
+): SessionStep[] {
+    const err = validateWorkoutExercise(ex, setStyle);
     if (err) {
         return [
             {
@@ -45,7 +57,7 @@ export function buildWorkoutStepsForExercise(ex: Exercise): SessionStep[] {
         });
     }
 
-    const { warmups, working } = resolveWorkoutSetCounts(ex);
+    const { warmups, working } = resolveWorkoutSetCounts(ex, setStyle);
     const reps = clampInt(ex.reps, 1, 500);
     const durationSeconds = clampInt(ex.durationSeconds, 1, 3600);
     const isTimeMode = ex.mode === ExerciseMode.Time;
@@ -124,11 +136,18 @@ function clampInt(v: any, min: number, max: number): number {
     return Math.max(min, Math.min(max, n));
 }
 
-function resolveWorkoutSetCounts(ex: Exercise): {
+function resolveWorkoutSetCounts(ex: Exercise, setStyle: WorkoutSetStyle): {
     warmups: number;
     working: number;
 } {
+    if (setStyle === "mobility") {
+        return {
+            warmups: 0,
+            working: clampInt(ex.sets, 0, 70),
+        };
+    }
+
     const warmups = clampInt(ex.warmupSets, 0, 20);
-    const working = clampInt(ex.workingSets, 0, 50);
+    const working = clampInt(ex.workingSets, 0, 70);
     return { warmups, working };
 }

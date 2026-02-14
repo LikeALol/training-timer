@@ -500,6 +500,7 @@ function normalizeWorkoutDayPlans(
 }
 
 function normalizeWorkoutDayEntry(source: any, exercise: Exercise): WorkoutDayEntry {
+    const exerciseName = String(source?.exerciseName ?? exercise.name ?? "Exercise").trim() || "Exercise";
     const warmupSets = clampInt(source?.warmupSets ?? exercise.warmupSets, 0, 20);
     const defaultWorkingSets = Math.max(1, clampInt(exercise.workingSets, 1, 50));
     const sets = clampInt(source?.sets ?? defaultWorkingSets, 1, 70);
@@ -521,6 +522,7 @@ function normalizeWorkoutDayEntry(source: any, exercise: Exercise): WorkoutDayEn
 
     return {
         exerciseId: exercise.id,
+        exerciseName,
         warmupSets,
         sets,
         reps,

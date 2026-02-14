@@ -9,6 +9,7 @@ import { useEngine } from "../engine/useEngine";
 import {
     buildWorkoutStepsForExercise,
     validateWorkoutExercise,
+    type WorkoutSetStyle,
 } from "../engine/workoutSteps";
 import type { WorkoutStore } from "../viewmodels/workoutStore";
 
@@ -37,6 +38,7 @@ function ExerciseExecution(props: {
     const snap = useEngine(engine);
 
     const plansEnabled = tab === TabType.Workout;
+    const setStyle: WorkoutSetStyle = tab === TabType.Workout ? "workout" : "mobility";
 
     const typeKey = `executionType.${tab}`;
     const workoutKey = `selectedWorkoutId.${tab}`;
@@ -98,7 +100,7 @@ function ExerciseExecution(props: {
     const isCompleted = snap.state === SessionState.Completed;
     const isSetStep = snap.currentStep?.kind === "awaitUserDone";
 
-    const error = effectiveExercise ? validateWorkoutExercise(effectiveExercise) : null;
+    const error = effectiveExercise ? validateWorkoutExercise(effectiveExercise, setStyle) : null;
     const canStart = !!effectiveExercise && !error && isIdle;
 
     const confirmFullReset = () => window.confirm("Full reset the session?");
@@ -110,8 +112,11 @@ function ExerciseExecution(props: {
         return exercises[idx + 1];
     })();
     const nextEffectiveExercise = buildEffectiveExercise(executionType, nextExercise, dayPlan?.entries);
+    const upNextSetCount = nextEffectiveExercise
+        ? Math.max(1, nextEffectiveExercise.warmupSets + nextEffectiveExercise.workingSets)
+        : 0;
     const upNextSummary = nextEffectiveExercise
-        ? `Up next: ${nextEffectiveExercise.name} ${nextEffectiveExercise.weight || "-"}Kg Sets: ${nextEffectiveExercise.workingSets} Reps: ${nextEffectiveExercise.reps}`
+        ? `Up next: ${nextEffectiveExercise.name} ${nextEffectiveExercise.weight || "-"}Kg Sets: ${upNextSetCount} Reps: ${nextEffectiveExercise.reps}`
         : null;
     const previousExercise = (() => {
         if (!exercise) return undefined;
@@ -135,7 +140,7 @@ function ExerciseExecution(props: {
         const previousEffective = buildEffectiveExercise(executionType, previousExercise, dayPlan?.entries);
         if (!previousEffective) return;
 
-        const prevSteps = buildWorkoutStepsForExercise(previousEffective);
+        const prevSteps = buildWorkoutStepsForExercise(previousEffective, setStyle);
         let targetIndex = prevSteps.length - 1;
         for (let i = prevSteps.length - 1; i >= 0; i--) {
             if (prevSteps[i]?.kind === "awaitUserDone") {
@@ -253,8 +258,8 @@ function ExerciseExecution(props: {
                             ? exercises.find((exerciseItem) => exerciseItem.id === v)
                             : undefined;
                         const selectedEffective = buildEffectiveExercise(executionType, selectedExercise, dayPlan?.entries);
-                        if (!isIdle && selectedEffective && !validateWorkoutExercise(selectedEffective)) {
-                            engine.startSession(buildWorkoutStepsForExercise(selectedEffective), {
+                        if (!isIdle && selectedEffective && !validateWorkoutExercise(selectedEffective, setStyle)) {
+                            engine.startSession(buildWorkoutStepsForExercise(selectedEffective, setStyle), {
                                 preserveTotalElapsed: true,
                             });
                             return;
@@ -290,7 +295,7 @@ function ExerciseExecution(props: {
                         style={{ flex: 1 }}
                         disabled={!canStart}
                         onClick={() =>
-                            effectiveExercise && engine.startSession(buildWorkoutStepsForExercise(effectiveExercise))
+                            effectiveExercise && engine.startSession(buildWorkoutStepsForExercise(effectiveExercise, setStyle))
                         }
                     >
                         Start
@@ -389,7 +394,7 @@ function ExerciseExecution(props: {
                                         const nextEffective = buildEffectiveExercise(executionType, nextExercise, dayPlan?.entries);
                                         if (!nextEffective) return;
 
-                                        engine.startSession(buildWorkoutStepsForExercise(nextEffective), {
+                                        engine.startSession(buildWorkoutStepsForExercise(nextEffective, setStyle), {
                                             preserveTotalElapsed: true,
                                         });
                                     }}
@@ -430,6 +435,7 @@ function buildEffectiveExercise(
 
     return {
         ...baseExercise,
+        name: entry.exerciseName || baseExercise.name,
         warmupSets: entry.warmupSets,
         workingSets: entry.sets,
         sets: Math.max(1, entry.warmupSets + entry.sets),
